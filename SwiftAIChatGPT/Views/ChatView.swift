@@ -15,13 +15,17 @@ struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var messageText = ""
     @State private var isThinking = false
+    @State private var streamingMessage: Message?
+    @State private var streamingText = ""
     @Bindable var conversation: Conversation
     
     private let mockResponses = [
         "I understand your question. Let me help you with that.",
         "That's an interesting point! Here's what I think about it.",
         "Based on what you're asking, I would suggest considering these options.",
-        "I see what you mean. Let me provide some insights on this topic."
+        "I see what you mean. Let me provide some insights on this topic.",
+        "**Great question!** Here's what I can tell you about that:\n\n*First*, let's consider the main aspects...",
+        "This is a **fascinating** topic. Let me break it down:\n\n1. The primary consideration\n2. Secondary factors\n3. Additional insights"
     ]
     
     var body: some View {
@@ -33,11 +37,23 @@ struct ChatView: View {
                         ForEach(conversation.messages) { message in
                             MessageBubble(message: message)
                                 .id(message.id)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .slide),
+                                    removal: .opacity
+                                ))
                         }
                         
                         if isThinking {
                             ThinkingBubble()
                                 .id("thinking")
+                                .transition(.opacity)
+                        }
+                        
+                        // Show streaming message if available
+                        if let streamingMessage = streamingMessage {
+                            MessageBubble(message: streamingMessage)
+                                .id("streaming")
+                                .transition(.opacity)
                         }
                         
                         // Invisible anchor for bottom scrolling
@@ -55,6 +71,9 @@ struct ChatView: View {
                         scrollToBottom(proxy: proxy)
                     }
                 }
+                .onChange(of: streamingMessage) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
                 .onAppear {
                     scrollToBottom(proxy: proxy)
                 }
@@ -62,7 +81,7 @@ struct ChatView: View {
             
             // Input area
             HStack(alignment: .bottom, spacing: 8) {
-                // Simple text input
+                // Message input
                 MessageInputView(text: $messageText)
                 
                 // Voice button (UI only for now)
@@ -110,22 +129,55 @@ struct ChatView: View {
         // Dismiss keyboard
         hideKeyboard()
         
-        // Simulate AI response
+        // Simulate AI response with streaming
         Task {
-            // Wait 2 seconds
+            // Wait 2 seconds for thinking
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             
-            // Stop thinking, add response
-            isThinking = false
+            // Stop thinking, prepare for streaming
+            await MainActor.run {
+                isThinking = false
+                
+                // Haptic feedback for first token
+                impact.impactOccurred()
+                
+                // Start streaming
+                let responseText = mockResponses.randomElement() ?? "I'm here to help!"
+                streamingMessage = Message(content: "", isUser: false)
+                streamTokens(responseText)
+            }
+        }
+    }
+    
+    private func streamTokens(_ fullText: String) {
+        let words = fullText.split(separator: " ")
+        streamingText = ""
+        
+        Task {
+            for (index, word) in words.enumerated() {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second per word
+                
+                await MainActor.run {
+                    if index > 0 {
+                        streamingText += " "
+                    }
+                    streamingText += String(word)
+                    
+                    // Update streaming message
+                    if streamingMessage != nil {
+                        streamingMessage!.content = streamingText
+                    }
+                }
+            }
             
-            // Haptic feedback for response
-            impact.impactOccurred()
-            
-            // Add mock AI response
-            let response = mockResponses.randomElement() ?? "I'm here to help!"
-            let aiMessage = Message(content: response, isUser: false)
-            conversation.messages.append(aiMessage)
-            conversation.lastUpdated = Date()
+            // After streaming is complete, add the message to conversation
+            await MainActor.run {
+                if let message = streamingMessage {
+                    conversation.messages.append(message)
+                    conversation.lastUpdated = Date()
+                    streamingMessage = nil
+                }
+            }
         }
     }
     
