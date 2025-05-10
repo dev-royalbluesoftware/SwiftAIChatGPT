@@ -124,3 +124,7 @@ struct IdleAudioView: View {
             .opacity(2 - animationPhase)
     }
 }
+
+#Preview {
+    VoiceChatView()
+}
