@@ -52,8 +52,7 @@ class ChatViewModel {
         
         // Haptic feedback
         await MainActor.run {
-            let impact = UIImpactFeedbackGenerator(style: .light)
-            impact.impactOccurred()
+            HapticService.tick()
         }
         
         // Add user message
@@ -84,8 +83,7 @@ class ChatViewModel {
             
             await MainActor.run {
                 isThinking = false
-                let impact = UIImpactFeedbackGenerator(style: .light)
-                impact.impactOccurred()
+                HapticService.tick()
                 
                 let responseText = mockResponses.randomElement() ?? "I'm here to help!"
                 streamingMessage = Message(content: "", isUser: false)

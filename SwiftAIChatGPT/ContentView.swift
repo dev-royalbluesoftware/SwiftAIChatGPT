@@ -23,15 +23,6 @@ struct ContentView: View {
             if let selectedConversation = selectedConversation {
                 NavigationStack {
                     ChatView(conversation: selectedConversation)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button(action: {
-                                    showingConversationList = true
-                                }) {
-                                    Image(systemName: "list.bullet")
-                                }
-                            }
-                        }
                 }
                 .sheet(isPresented: $showingConversationList) {
                     NavigationStack {
