@@ -13,9 +13,8 @@ import AVFoundation
 
 struct VoiceChatView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel = VoiceChatViewModel()
-    @State private var visualizationState: AudioVisualizationState = .idle
-    @State private var audioLevel: Float = 0.0
+    @State private var voiceViewModel = VoiceChatViewModel()
+    @State private var visualizationViewModel = AudioVisualizationViewModel()
     
     var body: some View {
         NavigationStack {
@@ -32,7 +31,8 @@ struct VoiceChatView: View {
                     // Header
                     HStack {
                         Button(action: {
-                            viewModel.stopVoiceChat()
+                            voiceViewModel.stopVoiceChat()
+                            visualizationViewModel.stopSimulation()
                             dismiss()
                         }) {
                             Image(systemName: "xmark")
@@ -48,9 +48,9 @@ struct VoiceChatView: View {
                     
                     // Audio visualization
                     AudioVisualizationContainer(
-                        state: $visualizationState,
-                        audioLevel: $audioLevel,
-                        isRecording: $viewModel.isRecording
+                        state: $visualizationViewModel.state,
+                        audioLevel: $visualizationViewModel.audioLevel,
+                        isRecording: $voiceViewModel.isRecording
                     )
                     .frame(height: 200)
                     .padding()
@@ -64,9 +64,9 @@ struct VoiceChatView: View {
                         .padding(.bottom, 20)
                     
                     // Transcribed text display
-                    if !viewModel.transcribedText.isEmpty {
+                    if !voiceViewModel.transcribedText.isEmpty {
                         ScrollView {
-                            Text(viewModel.transcribedText)
+                            Text(voiceViewModel.transcribedText)
                                 .foregroundColor(.white)
                                 .padding()
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,48 +83,46 @@ struct VoiceChatView: View {
                     Button(action: toggleRecording) {
                         ZStack {
                             Circle()
-                                .fill(viewModel.isRecording ? Color.red : Color.white)
+                                .fill(voiceViewModel.isRecording ? Color.red : Color.white)
                                 .frame(width: 80, height: 80)
                             
-                            Image(systemName: viewModel.isRecording ? "stop.fill" : "mic.fill")
+                            Image(systemName: voiceViewModel.isRecording ? "stop.fill" : "mic.fill")
                                 .font(.system(size: 35))
-                                .foregroundColor(viewModel.isRecording ? .white : .black)
+                                .foregroundColor(voiceViewModel.isRecording ? .white : .black)
                         }
                     }
                     .padding(.bottom, 50)
                 }
             }
             .preferredColorScheme(.dark)
-            .alert("Permission Required", isPresented: .constant(viewModel.errorMessage != nil)) {
+            .alert("Permission Required", isPresented: .constant(voiceViewModel.errorMessage != nil)) {
                 Button("Settings") {
                     if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(settingsUrl)
                     }
                 }
                 Button("Cancel") {
-                    viewModel.errorMessage = nil
+                    voiceViewModel.errorMessage = nil
                     dismiss()
                 }
             } message: {
-                if let errorMessage = viewModel.errorMessage {
+                if let errorMessage = voiceViewModel.errorMessage {
                     Text(errorMessage)
                 }
             }
         }
-        .onChange(of: viewModel.isRecording) { oldValue, newValue in
-            updateVisualizationState(isRecording: newValue)
+        .onChange(of: voiceViewModel.isRecording) { oldValue, newValue in
+            visualizationViewModel.updateState(isRecording: newValue)
         }
-        .onChange(of: viewModel.isProcessing) { oldValue, newValue in
+        .onChange(of: voiceViewModel.isProcessing) { oldValue, newValue in
             if newValue {
-                visualizationState = .responding
-                // Simulate audio level changes
-                simulateAudioLevel()
+                visualizationViewModel.setResponding()
             }
         }
     }
     
     private var statusText: String {
-        switch visualizationState {
+        switch visualizationViewModel.state {
         case .idle:
             return "Tap to start speaking"
         case .listening:
@@ -135,29 +133,11 @@ struct VoiceChatView: View {
     }
     
     private func toggleRecording() {
-        if viewModel.isRecording {
-            viewModel.stopVoiceChat()
+        if voiceViewModel.isRecording {
+            voiceViewModel.stopVoiceChat()
         } else {
             Task {
-                await viewModel.startVoiceChat()
-            }
-        }
-    }
-    
-    private func updateVisualizationState(isRecording: Bool) {
-        withAnimation {
-            visualizationState = isRecording ? .listening : .idle
-        }
-    }
-    
-    private func simulateAudioLevel() {
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-            if visualizationState == .responding {
-                // Simulate varying audio levels
-                audioLevel = Float.random(in: 0.3...0.8)
-            } else {
-                timer.invalidate()
-                audioLevel = 0.0
+                await voiceViewModel.startVoiceChat()
             }
         }
     }
