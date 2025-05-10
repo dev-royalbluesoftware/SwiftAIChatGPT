@@ -11,10 +11,14 @@
 import SwiftUI
 import SwiftData
 
-// Views/ChatView.swift
 struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
+    @State private var networkMonitor = NetworkMonitor()
     @State private var viewModel: ChatViewModel
+    @State private var showingVoiceChat = false
+    @State private var showingConversationList = false
+    @State private var showError = false
+    @State private var errorMessage = ""
     
     init(conversation: Conversation) {
         self._viewModel = State(initialValue: ChatViewModel(conversation: conversation))
@@ -22,6 +26,19 @@ struct ChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Network status banner
+            if !networkMonitor.isConnected {
+                HStack {
+                    Image(systemName: "wifi.slash")
+                    Text("No Internet Connection")
+                        .font(.caption)
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .background(Color.orange)
+            }
+            
             // Messages list
             ScrollViewReader { proxy in
                 ScrollView {
@@ -67,7 +84,9 @@ struct ChatView: View {
             HStack(alignment: .bottom, spacing: 8) {
                 MessageInputView(text: $viewModel.messageText)
                 
-                Button(action: openVoiceChat) {
+                Button(action: {
+                    showingVoiceChat = true
+                }) {
                     Image(systemName: "waveform")
                         .font(.system(size: 20))
                         .foregroundColor(.blue)
@@ -76,7 +95,16 @@ struct ChatView: View {
                 
                 Button(action: {
                     Task {
-                        await viewModel.sendMessage()
+                        do {
+                            if networkMonitor.isConnected {
+                                await viewModel.sendMessage()
+                            } else {
+                                throw ChatError.networkUnavailable
+                            }
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            showError = true
+                        }
                     }
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -89,17 +117,37 @@ struct ChatView: View {
         }
         .navigationTitle(viewModel.conversation.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    showingConversationList = true
+                }) {
+                    Image(systemName: "list.bullet")
+                }
+            }
+        }
         .onTapGesture {
             hideKeyboard()
         }
         .onAppear {
-            // Inject the modelContext from the environment into the viewModel
             viewModel.modelContext = modelContext
         }
-    }
-    
-    private func openVoiceChat() {
-        // TODO: Implement voice chat UI
+        .sheet(isPresented: $showingVoiceChat) {
+            VoiceChatView()
+        }
+        .sheet(isPresented: $showingConversationList) {
+            NavigationStack {
+                ConversationSelectionView(selectedConversation: .constant(viewModel.conversation))
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showingConversationList = false
+                            }
+                        }
+                    }
+            }
+        }
+        .toast(isShowing: $showError, message: errorMessage, type: .error)
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy) {
@@ -111,4 +159,9 @@ struct ChatView: View {
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
+}
+
+#Preview {
+    ChatView(conversation: Conversation())
+        .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
 }

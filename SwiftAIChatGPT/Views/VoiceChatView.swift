@@ -14,71 +14,96 @@ import AVFoundation
 struct VoiceChatView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = VoiceChatViewModel()
-    @State private var animationPhase = 0.0
+    @State private var visualizationState: AudioVisualizationState = .idle
+    @State private var audioLevel: Float = 0.0
     
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                // Gradient background
+                LinearGradient(
+                    colors: [.black, Color(white: 0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
                 VStack {
-                    Spacer()
-                    
-                    // Visual representation of audio
-                    if viewModel.isRecording {
-                        AudioVisualizerView(isRecording: $viewModel.isRecording)
-                    } else {
-                        IdleAudioView(animationPhase: $animationPhase)
-                    }
-                    
-                    Spacer()
-                    
-                    // Transcribed text display
-                    if !viewModel.transcribedText.isEmpty {
-                        Text(viewModel.transcribedText)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.black.opacity(0.7))
-                            )
-                            .padding(.horizontal)
-                    }
-                    
-                    // Control buttons
-                    HStack(spacing: 40) {
-                        // Cancel button
+                    // Header
+                    HStack {
                         Button(action: {
                             viewModel.stopVoiceChat()
                             dismiss()
                         }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.red)
+                            Image(systemName: "xmark")
+                                .font(.title2)
+                                .foregroundColor(.white)
                         }
+                        .padding()
                         
-                        // Record/Stop button
-                        Button(action: {
-                            if viewModel.isRecording {
-                                viewModel.stopVoiceChat()
-                            } else {
-                                Task {
-                                    await viewModel.startVoiceChat()
-                                }
-                            }
-                        }) {
-                            Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(viewModel.isRecording ? .red : .white)
+                        Spacer()
+                    }
+                    
+                    Spacer()
+                    
+                    // Audio visualization
+                    AudioVisualizationContainer(
+                        state: $visualizationState,
+                        audioLevel: $audioLevel,
+                        isRecording: $viewModel.isRecording
+                    )
+                    .frame(height: 200)
+                    .padding()
+                    
+                    Spacer()
+                    
+                    // Status text
+                    Text(statusText)
+                        .foregroundColor(.white.opacity(0.7))
+                        .font(.subheadline)
+                        .padding(.bottom, 20)
+                    
+                    // Transcribed text display
+                    if !viewModel.transcribedText.isEmpty {
+                        ScrollView {
+                            Text(viewModel.transcribedText)
+                                .foregroundColor(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 150)
+                        .background(
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(Color.black.opacity(0.3))
+                        )
+                        .padding(.horizontal)
+                    }
+                    
+                    // Main action button
+                    Button(action: toggleRecording) {
+                        ZStack {
+                            Circle()
+                                .fill(viewModel.isRecording ? Color.red : Color.white)
+                                .frame(width: 80, height: 80)
+                            
+                            Image(systemName: viewModel.isRecording ? "stop.fill" : "mic.fill")
+                                .font(.system(size: 35))
+                                .foregroundColor(viewModel.isRecording ? .white : .black)
                         }
                     }
                     .padding(.bottom, 50)
                 }
             }
-            .navigationBarHidden(true)
-            .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
-                Button("OK") {
+            .preferredColorScheme(.dark)
+            .alert("Permission Required", isPresented: .constant(viewModel.errorMessage != nil)) {
+                Button("Settings") {
+                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(settingsUrl)
+                    }
+                }
+                Button("Cancel") {
                     viewModel.errorMessage = nil
+                    dismiss()
                 }
             } message: {
                 if let errorMessage = viewModel.errorMessage {
@@ -86,42 +111,55 @@ struct VoiceChatView: View {
                 }
             }
         }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: false)) {
-                animationPhase = 1.0
+        .onChange(of: viewModel.isRecording) { oldValue, newValue in
+            updateVisualizationState(isRecording: newValue)
+        }
+        .onChange(of: viewModel.isProcessing) { oldValue, newValue in
+            if newValue {
+                visualizationState = .responding
+                // Simulate audio level changes
+                simulateAudioLevel()
             }
         }
     }
-}
-
-// Simple visualization views (placeholders for now)
-struct AudioVisualizerView: View {
-    @Binding var isRecording: Bool
     
-    var body: some View {
-        // Placeholder for audio visualization
-        HStack(spacing: 4) {
-            ForEach(0..<20) { index in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.white)
-                    .frame(width: 10, height: CGFloat.random(in: 20...100))
-                    .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: isRecording)
+    private var statusText: String {
+        switch visualizationState {
+        case .idle:
+            return "Tap to start speaking"
+        case .listening:
+            return "Listening..."
+        case .responding:
+            return "AI is responding..."
+        }
+    }
+    
+    private func toggleRecording() {
+        if viewModel.isRecording {
+            viewModel.stopVoiceChat()
+        } else {
+            Task {
+                await viewModel.startVoiceChat()
             }
         }
-        .frame(height: 100)
     }
-}
-
-struct IdleAudioView: View {
-    @Binding var animationPhase: Double
     
-    var body: some View {
-        // Placeholder for idle state
-        Circle()
-            .stroke(Color.white.opacity(0.5), lineWidth: 4)
-            .frame(width: 150, height: 150)
-            .scaleEffect(animationPhase)
-            .opacity(2 - animationPhase)
+    private func updateVisualizationState(isRecording: Bool) {
+        withAnimation {
+            visualizationState = isRecording ? .listening : .idle
+        }
+    }
+    
+    private func simulateAudioLevel() {
+        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+            if visualizationState == .responding {
+                // Simulate varying audio levels
+                audioLevel = Float.random(in: 0.3...0.8)
+            } else {
+                timer.invalidate()
+                audioLevel = 0.0
+            }
+        }
     }
 }
 

@@ -95,49 +95,7 @@ struct ContentView: View {
     }
 }
 
-struct ConversationSelectionView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Conversation.lastUpdated, order: .reverse)
-    private var conversations: [Conversation]
-    @Binding var selectedConversation: Conversation?
-    
-    var body: some View {
-        List {
-            ForEach(conversations) { conversation in
-                Button(action: {
-                    selectedConversation = conversation
-                    dismiss()
-                }) {
-                    ConversationRow(conversation: conversation)
-                }
-                .foregroundColor(.primary)
-            }
-            .onDelete(perform: deleteConversations)
-        }
-        .navigationTitle("Conversations")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: createNewConversation) {
-                    Image(systemName: "square.and.pencil")
-                }
-            }
-        }
-    }
-    
-    private func createNewConversation() {
-        let conversation = Conversation()
-        modelContext.insert(conversation)
-        selectedConversation = conversation
-        dismiss()
-    }
-    
-    private func deleteConversations(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(conversations[index])
-        }
-    }
-}
+
 
 #Preview {
     ContentView()
