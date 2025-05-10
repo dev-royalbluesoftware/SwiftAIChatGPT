@@ -17,10 +17,7 @@ struct ChatView: View {
     @State private var viewModel: ChatViewModel
     
     init(conversation: Conversation) {
-        // Fix: Remove the ModelContext creation here since it's not needed
-        // The conversation already has a modelContext through its relationship
-        let viewModel = ChatViewModel(conversation: conversation)
-        self._viewModel = State(initialValue: viewModel)
+        self._viewModel = State(initialValue: ChatViewModel(conversation: conversation))
     }
     
     var body: some View {
