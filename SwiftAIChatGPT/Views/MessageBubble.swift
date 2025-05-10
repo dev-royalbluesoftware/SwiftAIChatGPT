@@ -28,14 +28,16 @@ struct MessageBubble: View {
                     .foregroundColor(message.isUser ? .white : .primary)
                 
                 if !message.isUser {
-                    // Action buttons for AI responses
+                    // Simple action buttons
                     HStack(spacing: 12) {
                         Button(action: copyMessage) {
                             Label("Copy", systemImage: "doc.on.doc")
                                 .font(.caption)
                         }
                         
-                        Button(action: playMessage) {
+                        Button(action: {
+                            // Placeholder for text-to-speech
+                        }) {
                             Label("Play", systemImage: "play.fill")
                                 .font(.caption)
                         }
@@ -51,11 +53,9 @@ struct MessageBubble: View {
     
     private func copyMessage() {
         UIPasteboard.general.string = message.content
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    }
-    
-    private func playMessage() {
-        // TODO: Implement text-to-speech
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        
+        // Simple haptic feedback
+        let impact = UIImpactFeedbackGenerator(style: .light)
+        impact.impactOccurred()
     }
 }

@@ -17,9 +17,16 @@ struct ChatView: View {
     @State private var isThinking = false
     @Bindable var conversation: Conversation
     
+    private let mockResponses = [
+        "I understand your question. Let me help you with that.",
+        "That's an interesting point! Here's what I think about it.",
+        "Based on what you're asking, I would suggest considering these options.",
+        "I see what you mean. Let me provide some insights on this topic."
+    ]
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Messages list
+            // Messages list with manual scroll-to-bottom
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 16) {
@@ -30,29 +37,36 @@ struct ChatView: View {
                         
                         if isThinking {
                             ThinkingBubble()
+                                .id("thinking")
                         }
+                        
+                        // Invisible anchor for bottom scrolling
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
                     }
                     .padding()
                 }
-                .onChange(of: conversation.messages.count) { oldValue, newValue in
-                    // Scroll to bottom when new message arrives
-                    if let lastMessage = conversation.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                        }
+                .onChange(of: conversation.messages.count) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
+                .onChange(of: isThinking) { _, newValue in
+                    if newValue {
+                        scrollToBottom(proxy: proxy)
                     }
+                }
+                .onAppear {
+                    scrollToBottom(proxy: proxy)
                 }
             }
             
             // Input area
             HStack(alignment: .bottom, spacing: 8) {
-                // Growing text editor
+                // Simple text input
                 MessageInputView(text: $messageText)
                 
-                // Voice chat button
-                Button(action: {
-                    // TODO: Implement voice chat
-                }) {
+                // Voice button (UI only for now)
+                Button(action: openVoiceChat) {
                     Image(systemName: "waveform")
                         .font(.system(size: 20))
                         .foregroundColor(.blue)
@@ -65,48 +79,67 @@ struct ChatView: View {
                         .font(.system(size: 32))
                         .foregroundColor(messageText.isEmpty ? .gray : .blue)
                 }
-                .disabled(messageText.isEmpty)
+                .disabled(messageText.isEmpty || isThinking)
             }
             .padding()
             .background(Color(.systemBackground))
         }
         .navigationTitle(conversation.title)
         .navigationBarTitleDisplayMode(.inline)
+        .onTapGesture {
+            // Dismiss keyboard
+            hideKeyboard()
+        }
     }
     
     private func sendMessage() {
         guard !messageText.isEmpty else { return }
         
+        // Haptic feedback
+        let impact = UIImpactFeedbackGenerator(style: .light)
+        impact.impactOccurred()
+        
         // Add user message
         let userMessage = Message(content: messageText, isUser: true)
         conversation.messages.append(userMessage)
         
-        // Clear input
-        let questionText = messageText
+        // Clear input and show thinking
         messageText = ""
-        
-        // Haptic feedback
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        
-        // Show thinking animation
         isThinking = true
         
-        // Simulate API response
+        // Dismiss keyboard
+        hideKeyboard()
+        
+        // Simulate AI response
         Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            // Wait 2 seconds
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             
-            let aiResponse = Message(
-                content: "This is a simulated response to: \(questionText)",
-                isUser: false
-            )
-            
-            conversation.messages.append(aiResponse)
-            conversation.lastUpdated = Date()
-            
+            // Stop thinking, add response
             isThinking = false
             
             // Haptic feedback for response
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            impact.impactOccurred()
+            
+            // Add mock AI response
+            let response = mockResponses.randomElement() ?? "I'm here to help!"
+            let aiMessage = Message(content: response, isUser: false)
+            conversation.messages.append(aiMessage)
+            conversation.lastUpdated = Date()
         }
+    }
+    
+    private func openVoiceChat() {
+        // TODO: Implement voice chat UI
+    }
+    
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo("bottom", anchor: .bottom)
+        }
+    }
+    
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
