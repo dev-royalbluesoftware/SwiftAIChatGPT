@@ -18,15 +18,16 @@ class ChatViewModel {
     var streamingMessage: Message?
     var streamingText = ""
     var conversation: Conversation
-    var modelContext: ModelContext?
+    private let modelContext: ModelContext
     
     // Network and error handling
     let networkMonitor = NetworkMonitor()
     var showError = false
     var errorMessage: String?
     
-    init(conversation: Conversation) {
+    init(conversation: Conversation, modelContext: ModelContext) {
         self.conversation = conversation
+        self.modelContext = modelContext
     }
     
     private let mockResponses = [
@@ -34,9 +35,9 @@ class ChatViewModel {
         "That's an interesting point! Here's what I think about it.",
         "Based on what you're asking, I would suggest considering these options.",
         "I see what you mean. Let me provide some insights on this topic.",
-        "**Great question!** Here's what I can tell you about that:\n\n*First*, let's consider the main aspects...",
-        "This is a **fascinating** topic. Let me break it down:\n\n1. The primary consideration\n2. Secondary factors\n3. Additional insights",
-        "# Understanding Your Query\n\nHere's a detailed explanation:\n\n## Key Points\n- First important aspect\n- Second consideration\n- Third element\n\n> Remember: This is just a simulation!",
+        "**Great question!** Here's what I can tell you about that:\n\n *First*, let's consider the main aspects...",
+        "This is a **fascinating** topic. Let me break it down:\n\n 1. The primary consideration\n 2. Secondary factors\n 3. Additional insights",
+        "# Understanding Your Query\n\n Here's a detailed explanation:\n\n## Key Points\n- First important aspect\n- Second consideration\n- Third element\n\n> Remember: This is just a simulation!",
         "Let me think about this...\n\n```swift\n// Example code snippet\nfunc demonstrateFeature() {\n    print(\"This is a code example\")\n}\n```\n\nThe above code shows a simple implementation."
     ]
     
@@ -57,16 +58,30 @@ class ChatViewModel {
             HapticService.tick()
         }
         
-        // Add user message
+        // Add user message - properly configuring the relationship
         let userMessage = Message(content: messageText, isUser: true)
+        userMessage.conversation = conversation  // Set the relationship
         conversation.messages.append(userMessage)
         
-        // Update conversation title if it's the first message
+        // Update conversation metadata
         if conversation.messages.count == 1 {
             conversation.title = String(messageText.prefix(50))
         }
+        conversation.lastUpdated = Date()
+        
+        // Persist the changes
+        do {
+            try modelContext.save()
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to save message: \(error.localizedDescription)"
+                showError = true
+            }
+            return
+        }
         
         // Clear input and show thinking
+        _ = messageText
         messageText = ""
         isThinking = true
         
@@ -89,7 +104,9 @@ class ChatViewModel {
                 HapticService.tick()
                 
                 let responseText = mockResponses.randomElement() ?? "I'm here to help!"
-                streamingMessage = Message(content: "", isUser: false)
+                let streamingMessage = Message(content: "", isUser: false)
+                streamingMessage.conversation = conversation  // Set the relationship
+                self.streamingMessage = streamingMessage
                 
                 Task {
                     await streamTokens(responseText)
@@ -131,8 +148,8 @@ class ChatViewModel {
                 }
                 streamingText += String(word)
                 
-                if streamingMessage != nil {
-                    streamingMessage!.content = streamingText
+                if let message = streamingMessage {
+                    message.content = streamingText
                 }
             }
         }
@@ -142,19 +159,30 @@ class ChatViewModel {
                 conversation.messages.append(message)
                 conversation.lastUpdated = Date()
                 
-                // Save to persistent storage
-                if let context = modelContext {
-                    do {
-                        try context.save()
-                    } catch {
-                        print("Failed to save conversation: \(error)")
-                        errorMessage = "Failed to save conversation."
-                        showError = true
-                    }
+                // Save the completed message
+                do {
+                    try modelContext.save()
+                } catch {
+                    print("Failed to save conversation: \(error)")
+                    errorMessage = "Failed to save conversation."
+                    showError = true
                 }
                 
                 streamingMessage = nil
             }
+        }
+    }
+    
+    @MainActor
+    func deleteMessage(_ message: Message) {
+        modelContext.delete(message)
+        conversation.lastUpdated = Date()
+        
+        do {
+            try modelContext.save()
+        } catch {
+            errorMessage = "Failed to delete message: \(error.localizedDescription)"
+            showError = true
         }
     }
 }
