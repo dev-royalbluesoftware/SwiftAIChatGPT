@@ -13,12 +13,10 @@ import SwiftData
 
 struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var networkMonitor = NetworkMonitor()
     @State private var viewModel: ChatViewModel
+    @State private var actionHandler = MessageActionHandler()
     @State private var showingVoiceChat = false
     @State private var showingConversationList = false
-    @State private var showError = false
-    @State private var errorMessage = ""
     
     init(conversation: Conversation) {
         self._viewModel = State(initialValue: ChatViewModel(conversation: conversation))
@@ -27,7 +25,7 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Network status banner
-            if !networkMonitor.isConnected {
+            if !viewModel.networkMonitor.isConnected {
                 HStack {
                     Image(systemName: "wifi.slash")
                     Text("No Internet Connection")
@@ -44,7 +42,7 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 16) {
                         ForEach(viewModel.conversation.messages) { message in
-                            MessageBubble(message: message)
+                            MessageBubble(message: message, actionHandler: actionHandler)
                                 .id(message.id)
                         }
                         
@@ -54,7 +52,7 @@ struct ChatView: View {
                         }
                         
                         if let streamingMessage = viewModel.streamingMessage {
-                            MessageBubble(message: streamingMessage)
+                            MessageBubble(message: streamingMessage, actionHandler: actionHandler)
                                 .id("streaming")
                         }
                         
@@ -95,16 +93,7 @@ struct ChatView: View {
                 
                 Button(action: {
                     Task {
-                        do {
-                            if networkMonitor.isConnected {
-                                await viewModel.sendMessage()
-                            } else {
-                                throw ChatError.networkUnavailable
-                            }
-                        } catch {
-                            errorMessage = error.localizedDescription
-                            showError = true
-                        }
+                        await viewModel.sendMessage()
                     }
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -147,7 +136,7 @@ struct ChatView: View {
                     }
             }
         }
-        .toast(isShowing: $showError, message: errorMessage, type: .error)
+        .toast(isShowing: $viewModel.showError, message: viewModel.errorMessage ?? "", type: .error)
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy) {

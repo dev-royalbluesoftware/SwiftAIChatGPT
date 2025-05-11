@@ -20,8 +20,9 @@ class ChatViewModel {
     var conversation: Conversation
     var modelContext: ModelContext?
     
-    // Network monitoring
+    // Network and error handling
     let networkMonitor = NetworkMonitor()
+    var showError = false
     var errorMessage: String?
     
     init(conversation: Conversation) {
@@ -46,6 +47,7 @@ class ChatViewModel {
         guard networkMonitor.isConnected else {
             await MainActor.run {
                 errorMessage = "No internet connection. Please check your network settings."
+                showError = true
             }
             return
         }
@@ -77,6 +79,7 @@ class ChatViewModel {
                 await MainActor.run {
                     isThinking = false
                     errorMessage = "Connection lost. Please try again."
+                    showError = true
                 }
                 return
             }
@@ -100,6 +103,7 @@ class ChatViewModel {
                 } else {
                     errorMessage = "An error occurred. Please try again."
                 }
+                showError = true
             }
         }
     }
@@ -114,6 +118,7 @@ class ChatViewModel {
                 await MainActor.run {
                     streamingMessage = nil
                     errorMessage = "Connection lost during response."
+                    showError = true
                 }
                 return
             }
@@ -143,6 +148,8 @@ class ChatViewModel {
                         try context.save()
                     } catch {
                         print("Failed to save conversation: \(error)")
+                        errorMessage = "Failed to save conversation."
+                        showError = true
                     }
                 }
                 

@@ -12,8 +12,7 @@ import SwiftData
 
 struct MessageBubble: View {
     let message: Message
-    @State private var copiedText: Bool = false
-    @State private var speechManager = SpeechManager()
+    let actionHandler: MessageActionHandler
     @State private var appeared = false
     
     var body: some View {
@@ -48,19 +47,23 @@ struct MessageBubble: View {
                 if !message.isUser {
                     // Action buttons for AI messages
                     HStack(spacing: 12) {
-                        Button(action: copyMessage) {
+                        Button(action: {
+                            actionHandler.copyMessage(message)
+                        }) {
                             HStack(spacing: 4) {
-                                Image(systemName: copiedText ? "checkmark" : "doc.on.doc")
-                                Text(copiedText ? "Copied" : "Copy")
+                                Image(systemName: actionHandler.copiedMessageId == message.id ? "checkmark" : "doc.on.doc")
+                                Text(actionHandler.copiedMessageId == message.id ? "Copied" : "Copy")
                             }
                             .font(.caption)
                         }
                         .buttonStyle(PlainButtonStyle())
                         
-                        Button(action: playMessage) {
+                        Button(action: {
+                            actionHandler.toggleSpeech(for: message)
+                        }) {
                             HStack(spacing: 4) {
-                                Image(systemName: speechManager.isSpeaking ? "stop.fill" : "play.fill")
-                                Text(speechManager.isSpeaking ? "Stop" : "Play")
+                                Image(systemName: actionHandler.isSpeaking ? "stop.fill" : "play.fill")
+                                Text(actionHandler.isSpeaking ? "Stop" : "Play")
                             }
                             .font(.caption)
                         }
@@ -86,51 +89,24 @@ struct MessageBubble: View {
             }
         }
     }
-    
-    private func copyMessage() {
-        ClipboardService.copyMessage(message.content)
-        
-        // Show copied state temporarily
-        withAnimation {
-            copiedText = true
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
-                copiedText = false
-            }
-        }
-    }
-    
-    private func playMessage() {
-        if speechManager.isSpeaking {
-            speechManager.stopSpeaking()
-        } else {
-            speechManager.speak(message.content)
-        }
-    }
-}
-
-// Enhanced Markdown View with better styling
-struct MarkdownView: View {
-    let text: String
-    
-    var body: some View {
-        if let attributedString = try? AttributedString(markdown: text) {
-            Text(attributedString)
-                .textSelection(.enabled)
-        } else {
-            Text(text)
-                .textSelection(.enabled)
-        }
-    }
 }
 
 #Preview {
-    VStack(spacing: 20) {
-        MessageBubble(message: Message(content: "Hello, how can I help you today?", isUser: false))
-        MessageBubble(message: Message(content: "I need help with SwiftUI", isUser: true))
-        MessageBubble(message: Message(content: "**SwiftUI** is a powerful framework for building *user interfaces*. Here's what you need to know:\n\n1. Declarative syntax\n2. Live previews\n3. Cross-platform support", isUser: false))
+    let actionHandler = MessageActionHandler()
+    
+    return VStack(spacing: 20) {
+        MessageBubble(
+            message: Message(content: "Hello, how can I help you today?", isUser: false),
+            actionHandler: actionHandler
+        )
+        MessageBubble(
+            message: Message(content: "I need help with SwiftUI", isUser: true),
+            actionHandler: actionHandler
+        )
+        MessageBubble(
+            message: Message(content: "**SwiftUI** is a powerful framework for building *user interfaces*. Here's what you need to know:\n\n1. Declarative syntax\n2. Live previews\n3. Cross-platform support", isUser: false),
+            actionHandler: actionHandler
+        )
     }
     .padding()
 }
