@@ -1,7 +1,7 @@
 //
 //
 // SwiftAIChatGPT
-// ContentView.swift
+// MainChatView.swift
 //
 // Created by rbs-dev
 // Copyright © Royal Blue Software
@@ -11,7 +11,7 @@
 import SwiftUI
 import SwiftData
 
-struct ContentView: View {
+struct MainChatView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Query private var conversations: [Conversation]
@@ -89,6 +89,6 @@ struct ContentView: View {
 
 
 #Preview {
-    ContentView()
+    MainChatView()
         .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
 }

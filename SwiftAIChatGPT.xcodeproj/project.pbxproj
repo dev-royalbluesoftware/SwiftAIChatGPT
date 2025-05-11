@@ -14,7 +14,7 @@
 		2C3E75F02DD0347F00AA7614 /* Exceptions for "SwiftAIChatGPT" folder in "SwiftAIChatGPT" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info.plist,
+				Resources/Info.plist,
 			);
 			target = 2C64FCA42DCFBF9800A7AA79 /* SwiftAIChatGPT */;
 		};
@@ -269,7 +269,7 @@
 				DEVELOPMENT_TEAM = 6UUX2L32WR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SwiftAIChatGPT/Info.plist;
+				INFOPLIST_FILE = SwiftAIChatGPT/Resources/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access for voice chat functionality.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app needs speech recognition to convert your voice to text during voice chat.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -300,7 +300,7 @@
 				DEVELOPMENT_TEAM = 6UUX2L32WR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = SwiftAIChatGPT/Info.plist;
+				INFOPLIST_FILE = SwiftAIChatGPT/Resources/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access for voice chat functionality.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app needs speech recognition to convert your voice to text during voice chat.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
