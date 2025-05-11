@@ -13,19 +13,31 @@ import SwiftData
 
 struct MainChatView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appCoordinator) private var coordinator
     @Query(sort: \Conversation.lastUpdated, order: .reverse)
     private var conversations: [Conversation]
-    @State private var coordinator = NavigationCoordinator()
     
     var body: some View {
+        @Bindable var coordinator = coordinator
+        
         NavigationStack {
             mainContent
                 .sheet(isPresented: $coordinator.showingConversationList) {
                     conversationListSheet
                 }
+                .alert("Error", isPresented: $coordinator.showError) {
+                    Button("OK") {
+                        coordinator.clearError()
+                    }
+                } message: {
+                    Text(coordinator.errorMessage ?? "An error occurred")
+                }
         }
         .onAppear {
-            setupInitialState()
+            coordinator.setupInitialConversation(
+                conversations: conversations,
+                in: modelContext
+            )
         }
         .onChange(of: conversations) { _, newConversations in
             handleConversationsChange(newConversations)
@@ -35,30 +47,25 @@ struct MainChatView: View {
     @ViewBuilder
     private var mainContent: some View {
         if let selectedConversation = coordinator.selectedConversation {
-            ChatViewContainer(
-                conversation: selectedConversation,
-                coordinator: coordinator
-            )
+            ChatView(conversation: selectedConversation)
+                .id(selectedConversation.id)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: {
+                            coordinator.showConversationList()
+                        }) {
+                            Image(systemName: "list.bullet")
+                        }
+                    }
+                }
         } else {
-            WelcomeScreen(
-                coordinator: coordinator,
-                hasConversations: !conversations.isEmpty,
-                onCreateConversation: createNewConversation
-            )
+            WelcomeScreen()
         }
     }
     
     private var conversationListSheet: some View {
         NavigationStack {
-            ConversationListView(coordinator: coordinator)
-        }
-    }
-    
-    private func setupInitialState() {
-        if conversations.isEmpty {
-            createInitialConversation()
-        } else if coordinator.selectedConversation == nil {
-            coordinator.selectedConversation = conversations.first
+            ConversationListView()
         }
     }
     
@@ -68,48 +75,13 @@ struct MainChatView: View {
             coordinator.selectedConversation = nil
         }
     }
-    
-    private func createNewConversation() {
-        _ = coordinator.createNewConversation(in: modelContext)
-    }
-    
-    private func createInitialConversation() {
-        let conversation = Conversation(title: "Welcome Chat")
-        modelContext.insert(conversation)
-        do {
-            try modelContext.save()
-            coordinator.selectedConversation = conversation
-        } catch {
-            print("Failed to create initial conversation: \(error)")
-        }
-    }
-}
-
-// MARK: - ChatViewContainer
-struct ChatViewContainer: View {
-    let conversation: Conversation
-    @Bindable var coordinator: NavigationCoordinator
-    
-    var body: some View {
-        ChatView(conversation: conversation)
-            .id(conversation.id)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        coordinator.showingConversationList = true
-                    }) {
-                        Image(systemName: "list.bullet")
-                    }
-                }
-            }
-    }
 }
 
 // MARK: - WelcomeScreen
 struct WelcomeScreen: View {
-    @Bindable var coordinator: NavigationCoordinator
-    let hasConversations: Bool
-    let onCreateConversation: () -> Void
+    @Environment(\.appCoordinator) private var coordinator
+    @Environment(\.modelContext) private var modelContext
+    @Query private var conversations: [Conversation]
     
     var body: some View {
         VStack(spacing: 30) {
@@ -141,7 +113,9 @@ struct WelcomeScreen: View {
     
     private var actionButtons: some View {
         VStack(spacing: 16) {
-            Button(action: onCreateConversation) {
+            Button(action: {
+                _ = coordinator.createNewConversation(in: modelContext)
+            }) {
                 Label("New Conversation", systemImage: "plus.bubble")
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -150,9 +124,9 @@ struct WelcomeScreen: View {
                     .cornerRadius(10)
             }
             
-            if hasConversations {
+            if !conversations.isEmpty {
                 Button(action: {
-                    coordinator.showingConversationList = true
+                    coordinator.showConversationList()
                 }) {
                     Label("View Conversations", systemImage: "list.bullet")
                         .frame(maxWidth: .infinity)
@@ -170,4 +144,5 @@ struct WelcomeScreen: View {
 #Preview {
     MainChatView()
         .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+        .withAppCoordinator(.makePreview())
 }

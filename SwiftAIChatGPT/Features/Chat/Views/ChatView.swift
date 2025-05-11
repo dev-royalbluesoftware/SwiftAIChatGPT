@@ -13,9 +13,9 @@ import SwiftData
 
 struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appCoordinator) private var coordinator
     @State private var viewModel: ChatViewModel?
     @State private var actionHandler = MessageActionHandler()
-    @State private var showingVoiceChat = false
     @State private var showError = false
     @State private var errorMessage: String?
     @State private var messageText = ""
@@ -44,12 +44,17 @@ struct ChatView: View {
     }
     
     private func initializeViewModel() {
-        let vm = ChatViewModel(conversation: conversation, modelContext: modelContext)
+        let vm = ChatViewModel(
+            conversation: conversation,
+            modelContext: modelContext,
+            networkMonitor: coordinator.networkMonitor
+        )
         viewModel = vm
         messageText = ""
     }
     
     private func resetForNewConversation() {
+        coordinator.resetForNewConversation()
         messageText = ""
         showError = false
         errorMessage = nil
@@ -63,9 +68,11 @@ struct ChatView: View {
     
     @ViewBuilder
     private func chatContent(viewModel: ChatViewModel) -> some View {
+        @Bindable var coordinator = coordinator
+        
         VStack(spacing: 0) {
             // Network status banner
-            if !viewModel.networkMonitor.isConnected {
+            if !coordinator.networkMonitor.isConnected {
                 networkStatusBanner()
             }
             
@@ -82,7 +89,7 @@ struct ChatView: View {
         .onTapGesture {
             hideKeyboard()
         }
-        .sheet(isPresented: $showingVoiceChat) {
+        .sheet(isPresented: $coordinator.showingVoiceChat) {
             VoiceChatView()
         }
         .toast(isShowing: $showError, message: errorMessage ?? "", type: .error)
@@ -91,13 +98,6 @@ struct ChatView: View {
                 showError = true
                 errorMessage = viewModel.errorMessage
                 viewModel.showError = false
-            }
-        }
-        // Sync message text with view model
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.keyboardWillShowNotification)) { _ in
-            // Ensure sync when keyboard appears
-            if viewModel.messageText != messageText {
-                viewModel.messageText = messageText
             }
         }
     }
@@ -117,7 +117,6 @@ struct ChatView: View {
     private func messageScrollView(viewModel: ChatViewModel, proxy: ScrollViewProxy) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                // Render conversation messages
                 ForEach(conversation.messages) { message in
                     MessageBubble(message: message, actionHandler: actionHandler)
                         .id(message.id)
@@ -137,7 +136,7 @@ struct ChatView: View {
                         ))
                 }
                 
-                // Show streaming message only if it exists and isn't already in messages
+                // Show streaming message
                 if let streamingMessage = viewModel.streamingMessage,
                    !conversation.messages.contains(where: { $0.id == streamingMessage.id }) {
                     MessageBubble(message: streamingMessage, actionHandler: actionHandler)
@@ -148,7 +147,7 @@ struct ChatView: View {
                         ))
                 }
                 
-                // Bottom anchor for scrolling
+                // Bottom anchor
                 Color.clear
                     .frame(height: 1)
                     .id("bottom")
@@ -182,7 +181,7 @@ struct ChatView: View {
                 }
             
             Button(action: {
-                showingVoiceChat = true
+                coordinator.showVoiceChat()
             }) {
                 Image(systemName: "waveform")
                     .font(.system(size: 20))
@@ -203,9 +202,7 @@ struct ChatView: View {
     }
     
     private func sendMessage(viewModel: ChatViewModel) {
-        // Clear local text immediately for better UX
         messageText = ""
-        
         Task {
             await viewModel.sendMessage()
         }
@@ -228,5 +225,6 @@ struct ChatView: View {
     NavigationStack {
         ChatView(conversation: Conversation())
             .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+            .withAppCoordinator(.makePreview())
     }
 }

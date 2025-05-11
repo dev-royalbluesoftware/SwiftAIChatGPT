@@ -19,4 +19,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+        .withAppCoordinator(.makePreview())
 }

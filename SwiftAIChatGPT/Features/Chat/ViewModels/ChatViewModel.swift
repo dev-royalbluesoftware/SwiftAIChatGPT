@@ -21,13 +21,14 @@ class ChatViewModel {
     private let modelContext: ModelContext
     
     // Network and error handling
-    let networkMonitor = NetworkMonitor()
+    let networkMonitor: NetworkMonitor
     var showError = false
     var errorMessage: String?
     
-    init(conversation: Conversation, modelContext: ModelContext) {
+    init(conversation: Conversation, modelContext: ModelContext, networkMonitor: NetworkMonitor) {
         self.conversation = conversation
         self.modelContext = modelContext
+        self.networkMonitor = networkMonitor
     }
     
     private let mockResponses = [

@@ -14,10 +14,9 @@ import SwiftData
 struct ConversationListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appCoordinator) private var coordinator
     @Query(sort: \Conversation.lastUpdated, order: .reverse)
     private var conversations: [Conversation]
-    
-    @Bindable var coordinator: NavigationCoordinator
     
     var body: some View {
         List {
@@ -85,7 +84,8 @@ struct ConversationListView: View {
 
 #Preview {
     NavigationStack {
-        ConversationListView(coordinator: NavigationCoordinator())
+        ConversationListView()
             .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+            .withAppCoordinator(.makePreview())
     }
 }
