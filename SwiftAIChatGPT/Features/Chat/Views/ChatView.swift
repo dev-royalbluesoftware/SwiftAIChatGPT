@@ -37,9 +37,8 @@ struct ChatView: View {
                     }
             }
         }
-        .id(conversation.id) // Force view refresh when conversation changes
+        .id(conversation.id)
         .onChange(of: conversation.id) { _, _ in
-            // Reset view model when conversation changes
             resetForNewConversation()
         }
     }
@@ -51,14 +50,12 @@ struct ChatView: View {
     }
     
     private func resetForNewConversation() {
-        // Reset all state for new conversation
         messageText = ""
         showError = false
         errorMessage = nil
         actionHandler.stopSpeaking()
         viewModel = nil
         
-        // Reinitialize with new conversation
         DispatchQueue.main.async {
             initializeViewModel()
         }
@@ -90,16 +87,18 @@ struct ChatView: View {
         }
         .toast(isShowing: $showError, message: errorMessage ?? "", type: .error)
         .onChange(of: viewModel.showError) { _, newValue in
-            showError = newValue
+            if newValue {
+                showError = true
+                errorMessage = viewModel.errorMessage
+                viewModel.showError = false
+            }
         }
-        .onChange(of: viewModel.errorMessage) { _, newValue in
-            errorMessage = newValue
-        }
-        .onChange(of: viewModel.messageText) { _, newValue in
-            messageText = newValue
-        }
-        .onChange(of: messageText) { _, newValue in
-            viewModel.messageText = newValue
+        // Sync message text with view model
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.keyboardWillShowNotification)) { _ in
+            // Ensure sync when keyboard appears
+            if viewModel.messageText != messageText {
+                viewModel.messageText = messageText
+            }
         }
     }
     
@@ -118,28 +117,48 @@ struct ChatView: View {
     private func messageScrollView(viewModel: ChatViewModel, proxy: ScrollViewProxy) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ForEach(viewModel.conversation.messages) { message in
+                // Render conversation messages
+                ForEach(conversation.messages) { message in
                     MessageBubble(message: message, actionHandler: actionHandler)
                         .id(message.id)
+                        .transition(.asymmetric(
+                            insertion: .slide.combined(with: .opacity),
+                            removal: .opacity
+                        ))
                 }
                 
+                // Show thinking bubble
                 if viewModel.isThinking {
                     ThinkingBubble()
                         .id("thinking")
+                        .transition(.asymmetric(
+                            insertion: .slide.combined(with: .opacity),
+                            removal: .opacity
+                        ))
                 }
                 
-                if let streamingMessage = viewModel.streamingMessage {
+                // Show streaming message only if it exists and isn't already in messages
+                if let streamingMessage = viewModel.streamingMessage,
+                   !conversation.messages.contains(where: { $0.id == streamingMessage.id }) {
                     MessageBubble(message: streamingMessage, actionHandler: actionHandler)
-                        .id("streaming")
+                        .id("streaming-\(streamingMessage.id)")
+                        .transition(.asymmetric(
+                            insertion: .slide.combined(with: .opacity),
+                            removal: .opacity
+                        ))
                 }
                 
+                // Bottom anchor for scrolling
                 Color.clear
                     .frame(height: 1)
                     .id("bottom")
             }
             .padding()
+            .animation(.easeInOut(duration: 0.3), value: conversation.messages.count)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.isThinking)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.streamingMessage?.id)
         }
-        .onChange(of: viewModel.conversation.messages.count) { _, _ in
+        .onChange(of: conversation.messages.count) { _, _ in
             scrollToBottom(proxy: proxy)
         }
         .onChange(of: viewModel.isThinking) { _, newValue in
@@ -147,7 +166,7 @@ struct ChatView: View {
                 scrollToBottom(proxy: proxy)
             }
         }
-        .onChange(of: viewModel.streamingMessage) { _, _ in
+        .onChange(of: viewModel.streamingMessage?.content) { _, _ in
             scrollToBottom(proxy: proxy)
         }
         .onAppear {
@@ -158,6 +177,9 @@ struct ChatView: View {
     private func inputArea(viewModel: ChatViewModel) -> some View {
         HStack(alignment: .bottom, spacing: 8) {
             MessageInputView(text: $messageText)
+                .onChange(of: messageText) { _, newValue in
+                    viewModel.messageText = newValue
+                }
             
             Button(action: {
                 showingVoiceChat = true
@@ -169,9 +191,7 @@ struct ChatView: View {
             .frame(width: 44, height: 44)
             
             Button(action: {
-                Task {
-                    await viewModel.sendMessage()
-                }
+                sendMessage(viewModel: viewModel)
             }) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 32))
@@ -182,9 +202,20 @@ struct ChatView: View {
         .padding()
     }
     
+    private func sendMessage(viewModel: ChatViewModel) {
+        // Clear local text immediately for better UX
+        messageText = ""
+        
+        Task {
+            await viewModel.sendMessage()
+        }
+    }
+    
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            proxy.scrollTo("bottom", anchor: .bottom)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
         }
     }
     
@@ -194,6 +225,8 @@ struct ChatView: View {
 }
 
 #Preview {
-    ChatView(conversation: Conversation())
-        .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+    NavigationStack {
+        ChatView(conversation: Conversation())
+            .modelContainer(for: [Conversation.self, Message.self], inMemory: true)
+    }
 }
