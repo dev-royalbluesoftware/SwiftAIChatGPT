@@ -16,8 +16,6 @@ struct ChatView: View {
     @Environment(\.appCoordinator) private var coordinator
     @State private var viewModel: ChatViewModel?
     @State private var actionHandler = MessageActionHandler()
-    @State private var showError = false
-    @State private var errorMessage: String?
     @State private var messageText = ""
     
     let conversation: Conversation
@@ -47,17 +45,17 @@ struct ChatView: View {
         let vm = ChatViewModel(
             conversation: conversation,
             modelContext: modelContext,
-            networkMonitor: coordinator.networkMonitor
+            networkMonitor: coordinator.networkMonitor,
+            errorHandler: { error in
+                coordinator.handleError(error)
+            }
         )
         viewModel = vm
         messageText = ""
     }
     
     private func resetForNewConversation() {
-        coordinator.resetForNewConversation()
         messageText = ""
-        showError = false
-        errorMessage = nil
         actionHandler.stopSpeaking()
         viewModel = nil
         
@@ -91,14 +89,6 @@ struct ChatView: View {
         }
         .sheet(isPresented: $coordinator.showingVoiceChat) {
             VoiceChatView()
-        }
-        .toast(isShowing: $showError, message: errorMessage ?? "", type: .error)
-        .onChange(of: viewModel.showError) { _, newValue in
-            if newValue {
-                showError = true
-                errorMessage = viewModel.errorMessage
-                viewModel.showError = false
-            }
         }
     }
     

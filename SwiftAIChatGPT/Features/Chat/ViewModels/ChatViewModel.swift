@@ -19,16 +19,21 @@ class ChatViewModel {
     var streamingText = ""
     private(set) var conversation: Conversation
     private let modelContext: ModelContext
+    private let errorHandler: (AppError) -> Void
     
     // Network and error handling
     let networkMonitor: NetworkMonitor
-    var showError = false
-    var errorMessage: String?
     
-    init(conversation: Conversation, modelContext: ModelContext, networkMonitor: NetworkMonitor) {
+    init(
+        conversation: Conversation,
+        modelContext: ModelContext,
+        networkMonitor: NetworkMonitor,
+        errorHandler: @escaping (AppError) -> Void
+    ) {
         self.conversation = conversation
         self.modelContext = modelContext
         self.networkMonitor = networkMonitor
+        self.errorHandler = errorHandler
     }
     
     private let mockResponses = [
@@ -48,8 +53,7 @@ class ChatViewModel {
         
         // Check network connectivity
         guard networkMonitor.isConnected else {
-            errorMessage = "No internet connection. Please check your network settings."
-            showError = true
+            errorHandler(.networkUnavailable)
             return
         }
         
@@ -75,8 +79,7 @@ class ChatViewModel {
             modelContext.insert(userMessage)
             try modelContext.save()
         } catch {
-            errorMessage = "Failed to save message: \(error.localizedDescription)"
-            showError = true
+            errorHandler(.saveFailed("Could not save your message"))
             return
         }
         
@@ -103,8 +106,7 @@ class ChatViewModel {
             guard networkMonitor.isConnected else {
                 await MainActor.run {
                     isThinking = false
-                    errorMessage = "Connection lost. Please try again."
-                    showError = true
+                    errorHandler(.networkUnavailable)
                 }
                 return
             }
@@ -121,11 +123,10 @@ class ChatViewModel {
             await MainActor.run {
                 isThinking = false
                 if error is CancellationError {
-                    errorMessage = "Request was cancelled."
+                    errorHandler(.timeout)
                 } else {
-                    errorMessage = "An error occurred. Please try again."
+                    errorHandler(.apiError("Unable to get response"))
                 }
-                showError = true
             }
         }
     }
@@ -157,7 +158,7 @@ class ChatViewModel {
             // Check connectivity
             guard networkMonitor.isConnected else {
                 await MainActor.run {
-                    completeStreamingWithError("Connection lost during response.")
+                    completeStreamingWithError(.networkUnavailable)
                 }
                 return
             }
@@ -206,18 +207,15 @@ class ChatViewModel {
             modelContext.insert(messageToSave)
             try modelContext.save()
         } catch {
-            print("Failed to save conversation: \(error)")
-            errorMessage = "Failed to save conversation."
-            showError = true
+            errorHandler(.saveFailed("Could not save AI response"))
         }
     }
     
     @MainActor
-    private func completeStreamingWithError(_ error: String) {
+    private func completeStreamingWithError(_ error: AppError) {
         streamingMessage = nil
         streamingText = ""
-        errorMessage = error
-        showError = true
+        errorHandler(error)
     }
     
     @MainActor
@@ -228,8 +226,7 @@ class ChatViewModel {
         do {
             try modelContext.save()
         } catch {
-            errorMessage = "Failed to delete message: \(error.localizedDescription)"
-            showError = true
+            errorHandler(.saveFailed("Could not delete message"))
         }
     }
     

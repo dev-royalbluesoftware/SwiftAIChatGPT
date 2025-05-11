@@ -25,12 +25,12 @@ struct MainChatView: View {
                 .sheet(isPresented: $coordinator.showingConversationList) {
                     conversationListSheet
                 }
-                .alert("Error", isPresented: $coordinator.showError) {
-                    Button("OK") {
-                        coordinator.clearError()
-                    }
-                } message: {
-                    Text(coordinator.errorMessage ?? "An error occurred")
+                .errorHandler(coordinator.errorState) {
+                    // Retry action based on the error
+                    handleRetry()
+                } onSettings: {
+                    // Open settings
+                    openSettings()
                 }
         }
         .onAppear {
@@ -73,6 +73,34 @@ struct MainChatView: View {
         if let selected = coordinator.selectedConversation,
            !newConversations.contains(where: { $0.id == selected.id }) {
             coordinator.selectedConversation = nil
+        }
+    }
+    
+    private func handleRetry() {
+        // Implement retry logic based on the current error
+        if let error = coordinator.errorState.currentError {
+            switch error {
+            case .networkUnavailable:
+                // Network errors might resolve themselves, just clear
+                coordinator.clearError()
+            case .saveFailed:
+                // Retry save operation
+                if let conversation = coordinator.selectedConversation {
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        coordinator.handleGenericError(error, context: "Retry save")
+                    }
+                }
+            default:
+                coordinator.clearError()
+            }
+        }
+    }
+    
+    private func openSettings() {
+        if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsUrl)
         }
     }
 }

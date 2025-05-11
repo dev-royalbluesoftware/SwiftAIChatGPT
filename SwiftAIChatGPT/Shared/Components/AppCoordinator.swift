@@ -19,8 +19,7 @@ final class AppCoordinator {
     var showingVoiceChat = false
     
     // MARK: - Error Handling
-    var errorMessage: String?
-    var showError = false
+    let errorState = ErrorState()
     
     // MARK: - Shared Services
     let networkMonitor = NetworkMonitor()
@@ -54,7 +53,7 @@ final class AppCoordinator {
             selectConversation(conversation)
             return conversation
         } catch {
-            showError(error: error, message: "Failed to create conversation")
+            handleError(.saveFailed("Could not create new conversation"))
             return nil
         }
     }
@@ -70,7 +69,7 @@ final class AppCoordinator {
         do {
             try modelContext.save()
         } catch {
-            showError(error: error, message: "Failed to delete conversation")
+            handleError(.saveFailed("Could not delete conversation"))
         }
     }
     
@@ -80,21 +79,23 @@ final class AppCoordinator {
             conversation.lastUpdated = Date()
             try modelContext.save()
         } catch {
-            showError(error: error, message: "Failed to update conversation")
+            handleGenericError(error, context: "Failed to update conversation")
         }
     }
     
     // MARK: - Error Handling
     
-    private func showError(error: Error, message: String) {
-        errorMessage = "\(message): \(error.localizedDescription)"
-        showError = true
-        print("Error: \(message) - \(error)")
+    func handleError(_ error: AppError) {
+        errorState.show(error)
+    }
+    
+    func handleGenericError(_ error: Error, context: String) {
+        let appError = AppError.unknown("\(context): \(error.localizedDescription)")
+        errorState.show(appError)
     }
     
     func clearError() {
-        errorMessage = nil
-        showError = false
+        errorState.clear()
     }
     
     // MARK: - Initial Setup
@@ -108,7 +109,7 @@ final class AppCoordinator {
                 try modelContext.save()
                 selectedConversation = conversation
             } catch {
-                showError(error: error, message: "Failed to create initial conversation")
+                handleGenericError(error, context: "Failed to create initial conversation")
             }
         } else if selectedConversation == nil {
             selectedConversation = conversations.first
@@ -118,8 +119,7 @@ final class AppCoordinator {
     // MARK: - State Management
     
     func resetForNewConversation() {
-        showError = false
-        errorMessage = nil
+        errorState.clear()
     }
     
     // MARK: - Environment Support

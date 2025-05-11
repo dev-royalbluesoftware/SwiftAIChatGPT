@@ -17,7 +17,6 @@ class VoiceChatViewModel: NSObject {
     var isRecording = false
     var isProcessing = false
     var transcribedText = ""
-    var errorMessage: String?
     var aiResponse = ""
     var isAISpeaking = false
     
@@ -33,7 +32,11 @@ class VoiceChatViewModel: NSObject {
     var aiAudioLevel: Float = 0.0
     private var levelTimer: Timer?
     
-    override init() {
+    // Error handling
+    private let errorHandler: (AppError) -> Void
+    
+    init(errorHandler: @escaping (AppError) -> Void) {
+        self.errorHandler = errorHandler
         super.init()
         speechSynthesizer.delegate = self
     }
@@ -96,10 +99,10 @@ class VoiceChatViewModel: NSObject {
             if speechGranted {
                 await startRecording()
             } else {
-                errorMessage = "Speech recognition permission is required for voice chat."
+                errorHandler(.permissionDenied(.speechRecognition))
             }
         case .denied:
-            errorMessage = "Microphone access is denied. Please enable it in Settings."
+            errorHandler(.permissionDenied(.microphone))
         case .undetermined:
             let granted = await requestMicrophonePermission()
             if granted {
@@ -107,10 +110,10 @@ class VoiceChatViewModel: NSObject {
                 if speechGranted {
                     await startRecording()
                 } else {
-                    errorMessage = "Speech recognition permission is required for voice chat."
+                    errorHandler(.permissionDenied(.speechRecognition))
                 }
             } else {
-                errorMessage = "Microphone access is required for voice chat."
+                errorHandler(.permissionDenied(.microphone))
             }
         }
     }
@@ -153,8 +156,9 @@ class VoiceChatViewModel: NSObject {
                 }
                 
                 if let error = error {
-                    print("Recognition error: \(error)")
-                    self.stopRecording()
+                    DispatchQueue.main.async {
+                        self.handleRecognitionError(error)
+                    }
                 }
             }
             
@@ -177,9 +181,43 @@ class VoiceChatViewModel: NSObject {
             HapticService.tick()
             
         } catch {
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
-            isRecording = false
+            handleStartRecordingError(error)
         }
+    }
+    
+    private func handleStartRecordingError(_ error: Error) {
+        if let voiceChatError = error as? VoiceChatError {
+            switch voiceChatError {
+            case .audioInputUnavailable:
+                errorHandler(.recordingFailed("Audio input is not available"))
+            case .speechRecognitionUnavailable:
+                errorHandler(.speechRecognitionFailed("Speech recognition is not available"))
+            case .permissionDenied:
+                errorHandler(.permissionDenied(.microphone))
+            }
+        } else {
+            errorHandler(.recordingFailed(error.localizedDescription))
+        }
+        isRecording = false
+    }
+    
+    private func handleRecognitionError(_ error: Error) {
+        let nsError = error as NSError
+        switch nsError.domain {
+        case "kLSRErrorDomain":
+            // Speech recognition specific errors
+            switch nsError.code {
+            case 201: // No speech detected
+                errorHandler(.speechRecognitionFailed("No speech detected. Please speak clearly."))
+            case 203: // Audio recording error
+                errorHandler(.recordingFailed("Audio recording error"))
+            default:
+                errorHandler(.speechRecognitionFailed("Recognition failed"))
+            }
+        default:
+            errorHandler(.speechRecognitionFailed(error.localizedDescription))
+        }
+        stopRecording()
     }
     
     private func calculateAudioLevel(from buffer: AVAudioPCMBuffer) -> Float {
@@ -340,7 +378,7 @@ enum VoiceChatError: Error {
         case .speechRecognitionUnavailable:
             return "Speech recognition is not available"
         case .permissionDenied:
-            return "Microphone permission is denied"
+            return "Permission is denied"
         }
     }
 }
