@@ -74,6 +74,9 @@ class ChatViewModel {
         }
         conversation.lastUpdated = Date()
         
+        // Clear input immediately after creating the message
+        messageText = ""
+        
         // Save using the model context
         do {
             modelContext.insert(userMessage)
@@ -83,8 +86,7 @@ class ChatViewModel {
             return
         }
         
-        // Clear input and show thinking
-        messageText = ""
+        // Show thinking state
         isThinking = true
         
         // Clear any existing streaming message
@@ -92,9 +94,7 @@ class ChatViewModel {
         streamingText = ""
         
         // Simulate API call
-        Task {
-            await simulateAPIResponse()
-        }
+        await simulateAPIResponse()
     }
     
     private func simulateAPIResponse() async {

@@ -19,7 +19,10 @@ struct YarnBallVisualization: View {
             Canvas { context, size in
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let time = timeline.date.timeIntervalSinceReferenceDate
-                let animationSpeed = isRecording ? 1.5 + Double(audioLevel) : 1.0
+                
+                // Ensure audioLevel is safe
+                let safeAudioLevel = audioLevel.isFinite ? audioLevel : 0
+                let animationSpeed = isRecording ? 1.5 + Double(safeAudioLevel) : 1.0
                 
                 // Draw 3-4 strands that wrap around a sphere
                 for i in 0..<4 {
@@ -30,7 +33,7 @@ struct YarnBallVisualization: View {
                         strandIndex: i,
                         totalStrands: 4,
                         isRecording: isRecording,
-                        audioLevel: audioLevel
+                        audioLevel: safeAudioLevel
                     )
                 }
             }
@@ -48,7 +51,8 @@ struct YarnBallVisualization: View {
         audioLevel: Float
     ) {
         let baseRadius: CGFloat = 70
-        let radius = baseRadius + CGFloat(audioLevel * 20) // Pulse based on audio
+        let safeAudioLevel = CGFloat(audioLevel.isFinite ? audioLevel : 0)
+        let radius = baseRadius + safeAudioLevel * 20 // Pulse based on audio
         let strandOffset = Double(strandIndex) * 2 * .pi / Double(totalStrands)
         
         // Create path for the strand
@@ -62,7 +66,7 @@ struct YarnBallVisualization: View {
             let v = sin(t * 3 + time * 0.3) * 0.5 + 0.5
             
             // Add audio-based distortion
-            let audioDistortion = isRecording ? sin(t * 10 + time * 5) * CGFloat(audioLevel) * 10 : 0
+            let audioDistortion = isRecording ? sin(t * 10 + time * 5) * safeAudioLevel * 10 : 0
             
             // Convert to spherical coordinates
             let theta = u
@@ -82,6 +86,9 @@ struct YarnBallVisualization: View {
             let screenX = center.x + rotatedX * perspective
             let screenY = center.y + y * perspective
             
+            // Ensure coordinates are finite
+            guard screenX.isFinite && screenY.isFinite else { continue }
+            
             if firstPoint {
                 path.move(to: CGPoint(x: screenX, y: screenY))
                 firstPoint = false
@@ -91,7 +98,7 @@ struct YarnBallVisualization: View {
         }
         
         // Draw the strand with appropriate styling
-        let lineWidth = isRecording ? 3 + CGFloat(audioLevel * 2) : 2
+        let lineWidth = isRecording ? 3 + safeAudioLevel * 2 : 2
         let opacity = isRecording ? 0.9 : 0.6
         
         context.stroke(

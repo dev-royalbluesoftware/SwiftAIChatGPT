@@ -39,12 +39,17 @@ struct EqualizerVisualization: View {
             let distance = abs(i - centerIndex)
             let normalizedDistance = CGFloat(distance) / CGFloat(centerIndex)
             
+            // Ensure audioLevel is safe
+            let safeAudioLevel = CGFloat(audioLevel.isFinite ? audioLevel : 0)
+            
             // Create wave effect based on audio level
             let waveHeight = sin(CGFloat(Date().timeIntervalSince1970) * 3 + CGFloat(i) * 0.3)
-            let amplitudeMultiplier = max(0.1, CGFloat(audioLevel) - normalizedDistance * 0.5)
+            let amplitudeMultiplier = max(0.1, safeAudioLevel - normalizedDistance * 0.5)
             
             withAnimation(.easeInOut(duration: 0.1)) {
-                bars[i] = abs(waveHeight) * amplitudeMultiplier
+                let newValue = abs(waveHeight) * amplitudeMultiplier
+                // Ensure the bar height is finite and within bounds
+                bars[i] = newValue.isFinite ? max(0.1, min(1.0, newValue)) : 0.1
             }
         }
     }
@@ -65,7 +70,7 @@ struct EqualizerBar: View {
                     endPoint: .top
                 )
             )
-            .frame(height: max(4, height))
+            .frame(height: max(4, height.isFinite ? height : 4))
             .frame(maxWidth: .infinity)
     }
 }

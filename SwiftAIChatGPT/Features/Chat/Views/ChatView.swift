@@ -16,7 +16,6 @@ struct ChatView: View {
     @Environment(\.appCoordinator) private var coordinator
     @State private var viewModel: ChatViewModel?
     @State private var actionHandler = MessageActionHandler()
-    @State private var messageText = ""
     
     let conversation: Conversation
     
@@ -51,11 +50,9 @@ struct ChatView: View {
             }
         )
         viewModel = vm
-        messageText = ""
     }
     
     private func resetForNewConversation() {
-        messageText = ""
         actionHandler.stopSpeaking()
         viewModel = nil
         
@@ -67,6 +64,7 @@ struct ChatView: View {
     @ViewBuilder
     private func chatContent(viewModel: ChatViewModel) -> some View {
         @Bindable var coordinator = coordinator
+        @Bindable var vm = viewModel
         
         VStack(spacing: 0) {
             // Network status banner
@@ -79,8 +77,11 @@ struct ChatView: View {
                 messageScrollView(viewModel: viewModel, proxy: proxy)
             }
             
-            // Input area
-            inputArea(viewModel: viewModel)
+            Divider()
+            
+            // Input area - fixed at bottom
+            inputArea(viewModel: vm)
+                .background(Color(.systemBackground))
         }
         .navigationTitle(conversation.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -164,11 +165,10 @@ struct ChatView: View {
     }
     
     private func inputArea(viewModel: ChatViewModel) -> some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            MessageInputView(text: $messageText)
-                .onChange(of: messageText) { _, newValue in
-                    viewModel.messageText = newValue
-                }
+        @Bindable var vm = viewModel
+        
+        return HStack(alignment: .bottom, spacing: 8) {
+            MessageInputView(text: $vm.messageText)
             
             Button(action: {
                 coordinator.showVoiceChat()
@@ -178,24 +178,22 @@ struct ChatView: View {
                     .foregroundColor(.blue)
             }
             .frame(width: 44, height: 44)
+            .alignmentGuide(.bottom) { d in d[.bottom] }
             
             Button(action: {
-                sendMessage(viewModel: viewModel)
+                Task {
+                    await vm.sendMessage()
+                }
             }) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 32))
-                    .foregroundColor(messageText.isEmpty ? .gray : .blue)
+                    .foregroundColor(vm.messageText.isEmpty ? .gray : .blue)
             }
-            .disabled(messageText.isEmpty || viewModel.isThinking)
+            .disabled(vm.messageText.isEmpty || vm.isThinking)
+            .alignmentGuide(.bottom) { d in d[.bottom] }
         }
-        .padding()
-    }
-    
-    private func sendMessage(viewModel: ChatViewModel) {
-        messageText = ""
-        Task {
-            await viewModel.sendMessage()
-        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy) {

@@ -16,6 +16,7 @@ struct VoiceChatView: View {
     @Environment(\.appCoordinator) private var coordinator
     @State private var voiceViewModel: VoiceChatViewModel?
     @State private var visualizationViewModel = AudioVisualizationViewModel()
+    @State private var showRetryButton = false
     
     var body: some View {
         NavigationStack {
@@ -39,6 +40,10 @@ struct VoiceChatView: View {
             }
             .preferredColorScheme(.dark)
         }
+        .errorHandler(coordinator.errorState) {
+            // Show retry button when error occurs
+            showRetryButton = true
+        }
     }
     
     private func initializeViewModel() {
@@ -50,6 +55,8 @@ struct VoiceChatView: View {
     
     @ViewBuilder
     private func voiceChatContent(voiceViewModel: VoiceChatViewModel) -> some View {
+        @Bindable var voiceVM = voiceViewModel
+        
         VStack {
             // Header
             HStack {
@@ -73,7 +80,7 @@ struct VoiceChatView: View {
             AudioVisualizationContainer(
                 state: $visualizationViewModel.state,
                 audioLevel: $visualizationViewModel.audioLevel,
-                isRecording: .constant(voiceViewModel.isRecording)
+                isRecording: $voiceVM.isRecording
             )
             .frame(height: 200)
             .padding()
@@ -138,19 +145,38 @@ struct VoiceChatView: View {
             }
             .disabled(voiceViewModel.isProcessing || voiceViewModel.isAISpeaking)
             .padding(.bottom, 50)
+            
+            // Add a manual retry button if errors occur
+            if showRetryButton {
+                Button(action: {
+                    showRetryButton = false
+                    Task {
+                        await voiceViewModel.startVoiceChat()
+                    }
+                }) {
+                    Label("Retry Voice Chat", systemImage: "arrow.clockwise")
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.bottom, 20)
+            }
         }
         .onChange(of: voiceViewModel.isRecording) { _, newValue in
-            visualizationViewModel.updateState(isRecording: newValue, isAISpeaking: voiceViewModel.isAISpeaking)
+            updateVisualizationState(voiceViewModel: voiceViewModel)
         }
         .onChange(of: voiceViewModel.isAISpeaking) { _, newValue in
-            visualizationViewModel.updateState(isRecording: voiceViewModel.isRecording, isAISpeaking: newValue)
+            updateVisualizationState(voiceViewModel: voiceViewModel)
         }
         .onChange(of: voiceViewModel.userAudioLevel) { _, newValue in
+            // Throttle audio level updates to visualization
             if voiceViewModel.isRecording {
                 visualizationViewModel.updateAudioLevel(newValue)
             }
         }
         .onChange(of: voiceViewModel.aiAudioLevel) { _, newValue in
+            // Throttle audio level updates to visualization
             if voiceViewModel.isAISpeaking {
                 visualizationViewModel.updateAudioLevel(newValue)
             }
@@ -169,10 +195,22 @@ struct VoiceChatView: View {
         }
     }
     
+    private func updateVisualizationState(voiceViewModel: VoiceChatViewModel) {
+        if voiceViewModel.isAISpeaking {
+            visualizationViewModel.state = .responding
+        } else if voiceViewModel.isRecording {
+            visualizationViewModel.state = .listening
+        } else {
+            visualizationViewModel.state = .idle
+        }
+    }
+    
     private func toggleRecording(voiceViewModel: VoiceChatViewModel) {
         if voiceViewModel.isRecording {
             voiceViewModel.stopVoiceChat()
         } else {
+            // Clear any previous errors when manually starting
+            showRetryButton = false
             Task {
                 await voiceViewModel.startVoiceChat()
             }

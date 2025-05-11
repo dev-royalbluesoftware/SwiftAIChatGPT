@@ -30,11 +30,13 @@ class AudioVisualizationViewModel {
     }
     
     func updateAudioLevel(_ level: Float) {
-        audioLevel = level
+        // Ensure the level is a valid number and within bounds
+        let safeLevel = level.isFinite ? max(0, min(1, level)) : 0
+        audioLevel = safeLevel
         
         // Adjust animation speed based on audio level
         if state == .listening {
-            animationSpeed = 1.0 + Double(level) * 0.5
+            animationSpeed = 1.0 + Double(safeLevel) * 0.5
         }
     }
     
