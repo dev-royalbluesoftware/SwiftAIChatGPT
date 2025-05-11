@@ -24,19 +24,25 @@ struct AudioVisualizationContainer: View {
     var body: some View {
         ZStack {
             if state == .idle || state == .listening {
-                YarnBallVisualization(isRecording: $isRecording)
-                    .transition(.opacity.combined(with: .scale))
+                YarnBallVisualization(
+                    isRecording: $isRecording,
+                    audioLevel: $audioLevel
+                )
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.8)),
+                    removal: .opacity.combined(with: .scale(scale: 1.2))
+                ))
             }
             
             if state == .responding {
                 EqualizerVisualization(audioLevel: $audioLevel)
                     .transition(.asymmetric(
-                        insertion: .scale(scale: 0.1).combined(with: .opacity),
-                        removal: .scale(scale: 10).combined(with: .opacity)
+                        insertion: .slide.combined(with: .opacity),
+                        removal: .slide.combined(with: .opacity)
                     ))
             }
         }
-        .animation(.easeInOut(duration: 0.5), value: state)
+        .animation(.easeInOut(duration: 0.6), value: state)
     }
 }
 

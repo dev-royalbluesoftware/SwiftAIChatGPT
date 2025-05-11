@@ -14,6 +14,7 @@ struct MessageBubble: View {
     let message: Message
     @State private var copiedText: Bool = false
     @State private var speechManager = SpeechManager()
+    @State private var appeared = false
     
     var body: some View {
         HStack {
@@ -31,7 +32,7 @@ struct MessageBubble: View {
                         )
                         .foregroundColor(.white)
                 } else {
-                    // AI message with enhanced markdown support
+                    // AI message with enhanced markdown support and fade-in animation
                     MarkdownView(text: message.content)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
@@ -40,6 +41,8 @@ struct MessageBubble: View {
                                 .fill(Color(.systemGray5))
                         )
                         .foregroundColor(.primary)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(.easeIn(duration: 0.3), value: appeared)
                 }
                 
                 if !message.isUser {
@@ -64,11 +67,23 @@ struct MessageBubble: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                     .foregroundColor(.gray)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(.easeIn(duration: 0.3).delay(0.2), value: appeared)
                 }
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
             
             if !message.isUser { Spacer() }
+        }
+        .onAppear {
+            if !message.isUser {
+                // Fade in animation for AI messages
+                withAnimation {
+                    appeared = true
+                }
+            } else {
+                appeared = true
+            }
         }
     }
     

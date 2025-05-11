@@ -15,43 +15,32 @@ import SwiftUI
 class AudioVisualizationViewModel {
     var state: AudioVisualizationState = .idle
     var audioLevel: Float = 0.0
-    private var audioTimer: Timer?
+    var animationSpeed: Double = 1.0
     
-    func updateState(isRecording: Bool) {
-        withAnimation {
-            state = isRecording ? .listening : .idle
-        }
-    }
-    
-    func setResponding() {
-        state = .responding
-        simulateAudioLevel()
-    }
-    
-    private func simulateAudioLevel() {
-        audioTimer?.invalidate()
-        audioTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
-            guard let self = self else {
-                timer.invalidate()
-                return
-            }
-            
-            if self.state == .responding {
-                self.audioLevel = Float.random(in: 0.3...0.8)
+    func updateState(isRecording: Bool, isAISpeaking: Bool = false) {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            if isAISpeaking {
+                state = .responding
+            } else if isRecording {
+                state = .listening
             } else {
-                timer.invalidate()
-                self.audioLevel = 0.0
+                state = .idle
             }
         }
     }
     
-    func stopSimulation() {
-        audioTimer?.invalidate()
-        audioTimer = nil
-        audioLevel = 0.0
+    func updateAudioLevel(_ level: Float) {
+        audioLevel = level
+        
+        // Adjust animation speed based on audio level
+        if state == .listening {
+            animationSpeed = 1.0 + Double(level) * 0.5
+        }
     }
     
-    deinit {
-        stopSimulation()
+    func reset() {
+        state = .idle
+        audioLevel = 0.0
+        animationSpeed = 1.0
     }
 }

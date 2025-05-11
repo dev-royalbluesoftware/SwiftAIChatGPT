@@ -32,7 +32,7 @@ struct VoiceChatView: View {
                     HStack {
                         Button(action: {
                             voiceViewModel.stopVoiceChat()
-                            visualizationViewModel.stopSimulation()
+                            visualizationViewModel.reset()
                             dismiss()
                         }) {
                             Image(systemName: "xmark")
@@ -65,16 +65,36 @@ struct VoiceChatView: View {
                     
                     // Transcribed text display
                     if !voiceViewModel.transcribedText.isEmpty {
-                        ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("You:")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.7))
                             Text(voiceViewModel.transcribedText)
                                 .foregroundColor(.white)
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxHeight: 150)
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
                             RoundedRectangle(cornerRadius: 15)
-                                .fill(Color.black.opacity(0.3))
+                                .fill(Color.white.opacity(0.1))
+                        )
+                        .padding(.horizontal)
+                    }
+                    
+                    // AI Response display
+                    if !voiceViewModel.aiResponse.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("AI:")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.7))
+                            Text(voiceViewModel.aiResponse)
+                                .foregroundColor(.white)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(Color.blue.opacity(0.2))
                         )
                         .padding(.horizontal)
                     }
@@ -91,6 +111,7 @@ struct VoiceChatView: View {
                                 .foregroundColor(voiceViewModel.isRecording ? .white : .black)
                         }
                     }
+                    .disabled(voiceViewModel.isProcessing || voiceViewModel.isAISpeaking)
                     .padding(.bottom, 50)
                 }
             }
@@ -110,25 +131,34 @@ struct VoiceChatView: View {
                     Text(errorMessage)
                 }
             }
-        }
-        .onChange(of: voiceViewModel.isRecording) { oldValue, newValue in
-            visualizationViewModel.updateState(isRecording: newValue)
-        }
-        .onChange(of: voiceViewModel.isProcessing) { oldValue, newValue in
-            if newValue {
-                visualizationViewModel.setResponding()
+            .onChange(of: voiceViewModel.isRecording) { _, newValue in
+                visualizationViewModel.updateState(isRecording: newValue, isAISpeaking: voiceViewModel.isAISpeaking)
+            }
+            .onChange(of: voiceViewModel.isAISpeaking) { _, newValue in
+                visualizationViewModel.updateState(isRecording: voiceViewModel.isRecording, isAISpeaking: newValue)
+            }
+            .onChange(of: voiceViewModel.userAudioLevel) { _, newValue in
+                if voiceViewModel.isRecording {
+                    visualizationViewModel.updateAudioLevel(newValue)
+                }
+            }
+            .onChange(of: voiceViewModel.aiAudioLevel) { _, newValue in
+                if voiceViewModel.isAISpeaking {
+                    visualizationViewModel.updateAudioLevel(newValue)
+                }
             }
         }
     }
     
     private var statusText: String {
-        switch visualizationViewModel.state {
-        case .idle:
-            return "Tap to start speaking"
-        case .listening:
-            return "Listening..."
-        case .responding:
+        if voiceViewModel.isProcessing {
+            return "Processing..."
+        } else if voiceViewModel.isAISpeaking {
             return "AI is responding..."
+        } else if voiceViewModel.isRecording {
+            return "Listening..."
+        } else {
+            return "Tap to start speaking"
         }
     }
     
