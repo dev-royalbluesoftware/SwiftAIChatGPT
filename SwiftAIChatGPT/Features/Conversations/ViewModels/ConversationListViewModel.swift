@@ -5,7 +5,7 @@
 //
 // Created by rbs-dev
 // Copyright © Royal Blue Software
-// 
+//
 
 
 import SwiftUI

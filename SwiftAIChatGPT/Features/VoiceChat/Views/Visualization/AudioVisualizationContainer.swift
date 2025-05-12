@@ -9,17 +9,6 @@
 
 
 import SwiftUI
-//
-//
-// SwiftAIChatGPT
-// AudioVisualizationContainer.swift
-//
-// Created by rbs-dev
-// Copyright © Royal Blue Software
-//
-
-
-import SwiftUI
 
 enum AudioVisualizationState {
     case idle

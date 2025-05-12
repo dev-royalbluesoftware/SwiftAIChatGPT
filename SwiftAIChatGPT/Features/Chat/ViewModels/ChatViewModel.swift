@@ -166,10 +166,10 @@ class ChatViewModel {
     }
     
     // Replace these methods in ChatViewModel.swift
-
+    
     private func streamTokens(_ fullText: String) async {
         // Stream character by character to preserve Markdown
-        for (index, char) in fullText.enumerated() {
+        for (_, char) in fullText.enumerated() {
             // Check if streaming was cancelled
             guard streamingMessage != nil else { return }
             
@@ -192,7 +192,7 @@ class ChatViewModel {
             completeStreaming()
         }
     }
-
+    
     @MainActor
     private func updateStreamingText(_ char: String) {
         guard let message = streamingMessage else { return }

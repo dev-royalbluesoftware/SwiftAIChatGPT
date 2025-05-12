@@ -281,5 +281,4 @@ private func strandColor(for index: Int) -> Color {
         }
         .padding(.vertical)
     }
-    .previewLayout(.sizeThatFits)
 }

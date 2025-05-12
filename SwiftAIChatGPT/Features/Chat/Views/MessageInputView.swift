@@ -12,7 +12,7 @@ import SwiftData
 
 struct MessageInputView: View {
     @Binding var text: String
-       
+    
     var body: some View {
         TextEditor(text: $text)
             .font(.system(size: 16))
@@ -47,7 +47,7 @@ struct MessageInputView: View {
         
         MessageInputView(text: .constant("Short message"))
             .padding()
-            
+        
         MessageInputView(text: .constant("This is a much longer test message that spans multiple lines to demonstrate the growing behavior of the text input field. It should grow as more text is added until it reaches the maximum height of about 10 lines, after which it will become scrollable. Let's add even more text to make sure it scrolls properly when exceeding the maximum height."))
             .padding()
     }
