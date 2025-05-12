@@ -10,18 +10,6 @@
 
 import SwiftUI
 import AVFoundation
-//
-//
-// SwiftAIChatGPT
-// VoiceChatView.swift
-//
-// Created by rbs-dev
-// Copyright © Royal Blue Software
-//
-
-
-import SwiftUI
-import AVFoundation
 
 struct VoiceChatView: View {
     @Environment(\.dismiss) private var dismiss
@@ -179,8 +167,10 @@ struct VoiceChatView: View {
                     audioLevel: $visualizationViewModel.audioLevel,
                     isRecording: $voiceVM.isRecording
                 )
+                .frame(maxWidth: .infinity)
                 .frame(height: 200)
-                .padding()
+                .padding(.vertical)
+                .padding(.horizontal, 0) // Remove horizontal padding to allow full width
                 
                 Spacer()
                 

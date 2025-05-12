@@ -9,6 +9,17 @@
 
 
 import SwiftUI
+//
+//
+// SwiftAIChatGPT
+// AudioVisualizationContainer.swift
+//
+// Created by rbs-dev
+// Copyright © Royal Blue Software
+//
+
+
+import SwiftUI
 
 enum AudioVisualizationState {
     case idle
@@ -22,26 +33,12 @@ struct AudioVisualizationContainer: View {
     @Binding var isRecording: Bool
     
     var body: some View {
-        ZStack {
-            if state == .idle || state == .listening {
-                YarnBallVisualization(
-                    isRecording: $isRecording,
-                    audioLevel: $audioLevel
-                )
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.8)),
-                    removal: .opacity.combined(with: .scale(scale: 1.2))
-                ))
-            }
-            
-            if state == .responding {
-                EqualizerVisualization(audioLevel: $audioLevel)
-                    .transition(.asymmetric(
-                        insertion: .slide.combined(with: .opacity),
-                        removal: .slide.combined(with: .opacity)
-                    ))
-            }
-        }
+        YarnBallVisualization(
+            isRecording: $isRecording,
+            audioLevel: $audioLevel,
+            state: $state
+        )
+        .frame(maxWidth: .infinity) // Ensure visualization spans the full width of the container
         .animation(.easeInOut(duration: 0.6), value: state)
     }
 }
