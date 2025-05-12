@@ -69,18 +69,20 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // Network status banner
             if !coordinator.networkMonitor.isConnected {
-                networkStatusBanner()
+                NetworkStatusBanner()
             }
             
             // Messages list
-            ScrollViewReader { proxy in
-                messageScrollView(viewModel: viewModel, proxy: proxy)
-            }
+            MessageListView(
+                conversation: conversation,
+                viewModel: viewModel,
+                actionHandler: actionHandler
+            )
             
             Divider()
             
             // Input area - fixed at bottom
-            inputArea(viewModel: vm)
+            ChatInputArea(viewModel: vm)
                 .background(Color(.systemBackground))
         }
         .navigationTitle(conversation.title)
@@ -90,117 +92,6 @@ struct ChatView: View {
         }
         .sheet(isPresented: $coordinator.showingVoiceChat) {
             VoiceChatView()
-        }
-    }
-    
-    private func networkStatusBanner() -> some View {
-        HStack {
-            Image(systemName: "wifi.slash")
-            Text("No Internet Connection")
-                .font(.caption)
-        }
-        .foregroundColor(.white)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity)
-        .background(Color.orange)
-    }
-    
-    private func messageScrollView(viewModel: ChatViewModel, proxy: ScrollViewProxy) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(conversation.messages) { message in
-                    MessageBubble(message: message, actionHandler: actionHandler)
-                        .id(message.id)
-                        .transition(.asymmetric(
-                            insertion: .slide.combined(with: .opacity),
-                            removal: .opacity
-                        ))
-                }
-                
-                // Show thinking bubble
-                if viewModel.isThinking {
-                    ThinkingBubble()
-                        .id("thinking")
-                        .transition(.asymmetric(
-                            insertion: .slide.combined(with: .opacity),
-                            removal: .opacity
-                        ))
-                }
-                
-                // Show streaming message
-                if let streamingMessage = viewModel.streamingMessage,
-                   !conversation.messages.contains(where: { $0.id == streamingMessage.id }) {
-                    MessageBubble(message: streamingMessage, actionHandler: actionHandler)
-                        .id("streaming-\(streamingMessage.id)")
-                        .transition(.asymmetric(
-                            insertion: .slide.combined(with: .opacity),
-                            removal: .opacity
-                        ))
-                }
-                
-                // Bottom anchor
-                Color.clear
-                    .frame(height: 1)
-                    .id("bottom")
-            }
-            .padding()
-            .animation(.easeInOut(duration: 0.3), value: conversation.messages.count)
-            .animation(.easeInOut(duration: 0.3), value: viewModel.isThinking)
-            .animation(.easeInOut(duration: 0.3), value: viewModel.streamingMessage?.id)
-        }
-        .onChange(of: conversation.messages.count) { _, _ in
-            scrollToBottom(proxy: proxy)
-        }
-        .onChange(of: viewModel.isThinking) { _, newValue in
-            if newValue {
-                scrollToBottom(proxy: proxy)
-            }
-        }
-        .onChange(of: viewModel.streamingMessage?.content) { _, _ in
-            scrollToBottom(proxy: proxy)
-        }
-        .onAppear {
-            scrollToBottom(proxy: proxy)
-        }
-    }
-    
-    private func inputArea(viewModel: ChatViewModel) -> some View {
-        @Bindable var vm = viewModel
-        
-        return HStack(alignment: .bottom, spacing: 8) {
-            MessageInputView(text: $vm.messageText)
-            
-            Button(action: {
-                coordinator.showVoiceChat()
-            }) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 20))
-                    .foregroundColor(.blue)
-            }
-            .frame(width: 44, height: 44)
-            .alignmentGuide(.bottom) { d in d[.bottom] }
-            
-            Button(action: {
-                Task {
-                    await vm.sendMessage()
-                }
-            }) {
-                Image(systemName: "paperplane.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(vm.messageText.isEmpty ? .gray : .blue)
-            }
-            .disabled(vm.messageText.isEmpty || vm.isThinking)
-            .alignmentGuide(.bottom) { d in d[.bottom] }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
-    
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
         }
     }
     

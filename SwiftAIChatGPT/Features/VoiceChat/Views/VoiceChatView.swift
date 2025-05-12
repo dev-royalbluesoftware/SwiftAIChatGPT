@@ -155,8 +155,22 @@ struct VoiceChatView: View {
         
         VStack {
             if voiceViewModel.permissionDenied || showSettingsPrompt {
-                // Show permission denied view
-                permissionDeniedView(for: voiceViewModel)
+                // Show permission denied view using the extracted component
+                PermissionDeniedView(
+                    permissionType: voiceViewModel.deniedPermissionType,
+                    onTryAgain: {
+                        // Try again - this will re-request permission if it was previously "undetermined"
+                        voiceViewModel.retryAfterPermissionError()
+                        coordinator.clearError() // Clear any displayed error
+                        showSettingsPrompt = false
+                        allowDismissal = true // Allow dismissal again
+                        
+                        Task {
+                            await voiceViewModel.startVoiceChat()
+                        }
+                    },
+                    onOpenSettings: openSettings
+                )
             } else {
                 // Regular voice chat content
                 Spacer()
@@ -271,62 +285,6 @@ struct VoiceChatView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: voiceViewModel.permissionDenied)
         .animation(.easeInOut(duration: 0.3), value: showSettingsPrompt)
-    }
-    
-    // New View for Permission Denied UI
-    private func permissionDeniedView(for viewModel: VoiceChatViewModel) -> some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
-            Image(systemName: viewModel.deniedPermissionType == .microphone ? "mic.slash" : "waveform.slash")
-                .font(.system(size: 70))
-                .foregroundColor(.white.opacity(0.9))
-            
-            Text("\(viewModel.deniedPermissionType?.rawValue ?? "Permission") Required")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-            
-            Text("This feature requires \(viewModel.deniedPermissionType?.rawValue.lowercased() ?? "microphone") access to work properly. Please enable it in Settings to continue.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, 30)
-            
-            Spacer()
-            
-            HStack(spacing: 20) {
-                Button {
-                    // Try again - this will re-request permission if it was previously "undetermined"
-                    viewModel.retryAfterPermissionError()
-                    coordinator.clearError() // Clear any displayed error
-                    showSettingsPrompt = false
-                    allowDismissal = true // Allow dismissal again
-                    
-                    Task {
-                        await viewModel.startVoiceChat()
-                    }
-                } label: {
-                    Text("Try Again")
-                        .frame(minWidth: 130)
-                        .padding()
-                        .background(Color.blue.opacity(0.6))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                
-                Button {
-                    openSettings()
-                } label: {
-                    Text("Open Settings")
-                        .frame(minWidth: 130)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-            }
-            .padding(.bottom, 50)
-        }
     }
     
     private func statusText(for viewModel: VoiceChatViewModel) -> String {

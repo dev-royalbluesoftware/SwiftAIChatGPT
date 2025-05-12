@@ -27,10 +27,10 @@ struct MainChatView: View {
                 }
                 .errorHandler(coordinator.errorState) {
                     // Retry action based on the error
-                    handleRetry()
+                    coordinator.handleRetry(modelContext: modelContext)
                 } onSettings: {
                     // Open settings
-                    openSettings()
+                    coordinator.openSettings()
                 }
         }
         .onAppear {
@@ -40,7 +40,7 @@ struct MainChatView: View {
             )
         }
         .onChange(of: conversations) { _, newConversations in
-            handleConversationsChange(newConversations)
+            coordinator.handleConversationsChange(newConversations)
         }
     }
     
@@ -67,105 +67,6 @@ struct MainChatView: View {
         NavigationStack {
             ConversationListView()
         }
-    }
-    
-    private func handleConversationsChange(_ newConversations: [Conversation]) {
-        if let selected = coordinator.selectedConversation,
-           !newConversations.contains(where: { $0.id == selected.id }) {
-            coordinator.selectedConversation = nil
-        }
-    }
-    
-    private func handleRetry() {
-        // Implement retry logic based on the current error
-        if let error = coordinator.errorState.currentError {
-            switch error {
-            case .networkUnavailable:
-                // Network errors might resolve themselves, just clear
-                coordinator.clearError()
-            case .saveFailed:
-                // Retry save operation
-                if let conversation = coordinator.selectedConversation {
-                    do {
-                        try modelContext.save()
-                    } catch {
-                        coordinator.handleGenericError(error, context: "Retry save")
-                    }
-                }
-            default:
-                coordinator.clearError()
-            }
-        }
-    }
-    
-    private func openSettings() {
-        if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(settingsUrl)
-        }
-    }
-}
-
-// MARK: - WelcomeScreen
-struct WelcomeScreen: View {
-    @Environment(\.appCoordinator) private var coordinator
-    @Environment(\.modelContext) private var modelContext
-    @Query private var conversations: [Conversation]
-    
-    var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
-            welcomeHeader
-            
-            actionButtons
-            
-            Spacer()
-        }
-        .padding()
-    }
-    
-    private var welcomeHeader: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 80))
-                .foregroundColor(.gray)
-            
-            Text("Welcome to AI Chat")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Start a conversation to begin")
-                .foregroundColor(.gray)
-        }
-    }
-    
-    private var actionButtons: some View {
-        VStack(spacing: 16) {
-            Button(action: {
-                _ = coordinator.createNewConversation(in: modelContext)
-            }) {
-                Label("New Conversation", systemImage: "plus.bubble")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-            }
-            
-            if !conversations.isEmpty {
-                Button(action: {
-                    coordinator.showConversationList()
-                }) {
-                    Label("View Conversations", systemImage: "list.bullet")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.gray.opacity(0.2))
-                        .foregroundColor(.primary)
-                        .cornerRadius(10)
-                }
-            }
-        }
-        .frame(maxWidth: 300)
     }
 }
 

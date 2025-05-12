@@ -122,6 +122,43 @@ final class AppCoordinator {
         errorState.clear()
     }
     
+    // MARK: - Additional Methods for Refactoring
+    
+    func handleConversationsChange(_ newConversations: [Conversation]) {
+        if let selected = selectedConversation,
+           !newConversations.contains(where: { $0.id == selected.id }) {
+            selectedConversation = nil
+        }
+    }
+    
+    func handleRetry(modelContext: ModelContext) {
+        // Implement retry logic based on the current error
+        if let error = errorState.currentError {
+            switch error {
+            case .networkUnavailable:
+                // Network errors might resolve themselves, just clear
+                clearError()
+            case .saveFailed:
+                // Retry save operation
+                if let conversation = selectedConversation {
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        handleGenericError(error, context: "Retry save")
+                    }
+                }
+            default:
+                clearError()
+            }
+        }
+    }
+    
+    func openSettings() {
+        if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsUrl)
+        }
+    }
+    
     // MARK: - Environment Support
     
     static func makePreview() -> AppCoordinator {
