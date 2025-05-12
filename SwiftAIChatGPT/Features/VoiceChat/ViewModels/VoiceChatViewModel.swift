@@ -4,7 +4,7 @@
 // VoiceChatViewModel.swift
 //
 // Created by rbs-dev
-// Copyright © Royal Blue Software
+// Copyright Royal Blue Software
 //
 
 
@@ -21,6 +21,7 @@ class VoiceChatViewModel: NSObject {
     var isAISpeaking = false
     var permissionDenied = false
     var deniedPermissionType: AppError.PermissionType?
+    var isBeingDismissed = false
     
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -225,21 +226,23 @@ class VoiceChatViewModel: NSObject {
                 recognitionRequest.taskHint = .dictation
                 recognitionRequest.requiresOnDeviceRecognition = false  // Allow server-based recognition
                 
-                // Declare silence timer and tracking variables
+                // Declare silence timer for handling input processing
                 var silenceTimer: Timer?
-                var lastTranscriptionTime = Date()
                 
                 // Check if recognizer is available
                 guard let speechRecognizer = self.speechRecognizer, speechRecognizer.isAvailable else {
                     throw VoiceChatError.speechRecognitionUnavailable
                 }
                 
+                // Configure recording format
+                let recordingFormat = inputNode.outputFormat(forBus: 0)
+                
                 // Start recognition task
                 self.recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                     guard let self = self else { return }
                     
                     // Check if we should still be processing
-                    if self.isIntentionallyStopping || self.hasEncounteredError {
+                    if self.isIntentionallyStopping || self.hasEncounteredError || self.isBeingDismissed {
                         return
                     }
                     
@@ -247,11 +250,13 @@ class VoiceChatViewModel: NSObject {
                         let transcription = result.bestTranscription.formattedString
                         
                         DispatchQueue.main.async {
+                            // Again check if we're being dismissed before updates
+                            if self.isBeingDismissed { return }
+                            
                             // Only update if transcription actually changed
                             if self.transcribedText != transcription {
                                 self.transcribedText = transcription
                                 self.hasReceivedTranscription = true
-                                lastTranscriptionTime = Date()
                             }
                             
                             // Reset silence timer
@@ -261,7 +266,7 @@ class VoiceChatViewModel: NSObject {
                             if !transcription.isEmpty {
                                 silenceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
                                     // Process if we have transcription and user stops talking
-                                    if self.hasReceivedTranscription && !self.transcribedText.isEmpty && !self.isProcessing {
+                                    if self.hasReceivedTranscription && !self.transcribedText.isEmpty && !self.isProcessing && !self.isBeingDismissed {
                                         self.processUserInput(self.transcribedText)
                                     }
                                 }
@@ -284,23 +289,35 @@ class VoiceChatViewModel: NSObject {
                     }
                 }
                 
-                // Configure recording format
-                let recordingFormat = inputNode.outputFormat(forBus: 0)
-                
-                // Install tap on input node
+                // Install tap on input node with proper weak reference handling
                 inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, _ in
-                    self?.recognitionRequest?.append(buffer)
+                    guard let self = self else { return }
                     
-                    // Throttle audio level updates to prevent rate limit warnings
+                    // Check dismissal state before doing anything
+                    if self.isBeingDismissed { return }
+                    
+                    // Capture reference to request to avoid potential race condition
+                    guard let request = self.recognitionRequest else { return }
+                    
+                    // Append buffer to captured request reference
+                    request.append(buffer)
+                    
+                    // Throttle audio level updates
                     let now = Date()
-                    if now.timeIntervalSince(self?.audioLevelThrottler ?? now) >= self?.audioLevelUpdateInterval ?? 0.1 {
-                        self?.audioLevelThrottler = now
+                    if now.timeIntervalSince(self.audioLevelThrottler) >= self.audioLevelUpdateInterval {
+                        self.audioLevelThrottler = now
                         
-                        self?.audioQueue.async {
-                            if let level = self?.calculateAudioLevel(from: buffer) {
-                                DispatchQueue.main.async {
-                                    self?.userAudioLevel = level
-                                }
+                        // Re-check dismissal state
+                        if self.isBeingDismissed { return }
+                        
+                        self.audioQueue.async { [weak self] in
+                            guard let self = self, !self.isBeingDismissed else { return }
+                            
+                            let audioLevel = self.calculateAudioLevel(from: buffer)
+                            
+                            DispatchQueue.main.async { [weak self] in
+                                guard let self = self, !self.isBeingDismissed else { return }
+                                self.userAudioLevel = audioLevel
                             }
                         }
                     }
@@ -368,7 +385,7 @@ class VoiceChatViewModel: NSObject {
                 switch nsError.code {
                 case 201: // No speech detected
                     // Be more lenient with "no speech detected" errors
-                    if !self.hasReceivedTranscription && !self.isIntentionallyStopping {
+                    if !self.hasReceivedTranscription && !self.transcribedText.isEmpty && !self.isIntentionallyStopping {
                         // Don't show error immediately, just stop recording
                         self.stopRecording()
                     }
@@ -563,10 +580,89 @@ class VoiceChatViewModel: NSObject {
         }
     }
     
-    deinit {
-        stopVoiceChat()
+    // MARK: - Safe Dismissal
+    
+    func prepareForDismissal() {
+        // Set the dismissal flag first to prevent async operations
+        isBeingDismissed = true
+        
+        // Set other flags
+        isIntentionallyStopping = true
+        hasEncounteredError = true
+        
+        // Reset state variables immediately
+        isRecording = false
+        isProcessing = false
+        isAISpeaking = false
+        transcribedText = ""
+        aiResponse = ""
+        userAudioLevel = 0
+        aiAudioLevel = 0
+        permissionDenied = false
+        deniedPermissionType = nil
+        
+        // Important: Stop recognition task first
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        // Then end recognition request
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        
+        // Stop speech synthesis
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        speechSynthesizer.delegate = nil
+        
+        // Clean up audio engine
+        if let inputNode = audioEngine?.inputNode {
+            inputNode.removeTap(onBus: 0)
+        }
+        audioEngine?.stop()
+        audioEngine = nil
+        
+        // Clean up timers
+        levelTimer?.invalidate()
+        levelTimer = nil
+        
+        // Finally deactivate audio session
+        DispatchQueue.main.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
     
+    deinit {
+        // Set dismissal flag first
+        isBeingDismissed = true
+        
+        // Cancel recognition task first
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        // Then clean up request
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        
+        // Stop speech synthesis
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        speechSynthesizer.delegate = nil
+        
+        // Clean up audio engine
+        if let inputNode = audioEngine?.inputNode {
+            inputNode.removeTap(onBus: 0)
+        }
+        audioEngine?.stop()
+        audioEngine = nil
+        
+        // Clean up timers
+        levelTimer?.invalidate()
+        levelTimer = nil
+        
+        // Finally deactivate audio session
+        DispatchQueue.main.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+    }
+
     func retryAfterPermissionError() {
         permissionDenied = false
         deniedPermissionType = nil
