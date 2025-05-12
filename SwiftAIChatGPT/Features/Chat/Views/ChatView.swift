@@ -14,56 +14,57 @@ import SwiftData
 struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appCoordinator) private var coordinator
-    @State private var viewModel: ChatViewModel?
-    @State private var actionHandler = MessageActionHandler()
+    @State private var chatCoordinator: ChatCoordinator?
     
     let conversation: Conversation
     
     init(conversation: Conversation) {
         self.conversation = conversation
+        // Don't initialize chatCoordinator here since environment values aren't available yet
     }
     
     var body: some View {
         Group {
-            if let viewModel = viewModel {
+            if let chatCoordinator = chatCoordinator, let viewModel = chatCoordinator.viewModel {
                 chatContent(viewModel: viewModel)
             } else {
                 ProgressView()
                     .onAppear {
-                        initializeViewModel()
+                        initializeChatCoordinator()
                     }
             }
         }
         .id(conversation.id)
         .onChange(of: conversation.id) { _, _ in
             resetForNewConversation()
+            DispatchQueue.main.async {
+                initializeChatCoordinator()
+            }
         }
     }
     
-    private func initializeViewModel() {
-        let vm = ChatViewModel(
-            conversation: conversation,
+    private func initializeChatCoordinator() {
+        // Create the coordinator now that environment values are available
+        let newCoordinator = ChatCoordinator(
             modelContext: modelContext,
-            networkMonitor: coordinator.networkMonitor,
-            errorHandler: { error in
-                coordinator.handleError(error)
-            }
+            appCoordinator: coordinator
         )
-        viewModel = vm
+        
+        // Initialize the view model
+        newCoordinator.initializeViewModel(for: conversation)
+        
+        // Set the coordinator
+        self.chatCoordinator = newCoordinator
     }
     
     private func resetForNewConversation() {
-        actionHandler.stopSpeaking()
-        viewModel = nil
-        
-        DispatchQueue.main.async {
-            initializeViewModel()
-        }
+        chatCoordinator?.resetForNewConversation()
+        chatCoordinator = nil
     }
     
     @ViewBuilder
     private func chatContent(viewModel: ChatViewModel) -> some View {
-        @Bindable var coordinator = coordinator
+        @Bindable var appCoordinator = coordinator
         @Bindable var vm = viewModel
         
         VStack(spacing: 0) {
@@ -76,7 +77,7 @@ struct ChatView: View {
             MessageListView(
                 conversation: conversation,
                 viewModel: viewModel,
-                actionHandler: actionHandler
+                actionHandler: chatCoordinator?.actionHandler ?? MessageActionHandler()
             )
             
             Divider()
@@ -90,13 +91,13 @@ struct ChatView: View {
         .onTapGesture {
             hideKeyboard()
         }
-        .sheet(isPresented: $coordinator.showingVoiceChat) {
+        .sheet(isPresented: $appCoordinator.showingVoiceChat) {
             VoiceChatView()
         }
     }
     
     private func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        chatCoordinator?.hideKeyboard()
     }
 }
 

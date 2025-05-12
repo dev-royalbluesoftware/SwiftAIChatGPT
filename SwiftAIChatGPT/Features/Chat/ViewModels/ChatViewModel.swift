@@ -18,25 +18,14 @@ class ChatViewModel {
     var streamingMessage: Message?
     var streamingText = ""
     private(set) var conversation: Conversation
-    private let modelContext: ModelContext
+    
+    // Dependencies
+    private let messageManager: MessageManager
+    private let networkService: NetworkService
+    let networkMonitor: NetworkMonitor
     private let errorHandler: (AppError) -> Void
     
-    // Network and error handling
-    let networkMonitor: NetworkMonitor
-    
-    init(
-        conversation: Conversation,
-        modelContext: ModelContext,
-        networkMonitor: NetworkMonitor,
-        errorHandler: @escaping (AppError) -> Void
-    ) {
-        self.conversation = conversation
-        self.modelContext = modelContext
-        self.networkMonitor = networkMonitor
-        self.errorHandler = errorHandler
-    }
-    
-    // Replace only the mockResponses array in ChatViewModel.swift
+    // Sample mock responses (moved from earlier implementation)
     private let mockResponses = [
         // Simple responses with proper spacing
         "I understand your question. Let me help you with that.",
@@ -64,6 +53,39 @@ class ChatViewModel {
         "For more information, check the [Swift documentation](https://swift.org/documentation/) or visit [Apple's SwiftUI tutorials](https://developer.apple.com/tutorials/swiftui/)."
     ]
     
+    init(
+        conversation: Conversation,
+        modelContext: ModelContext,
+        networkMonitor: NetworkMonitor,
+        networkService: NetworkService,
+        errorHandler: @escaping (AppError) -> Void
+    ) {
+        self.conversation = conversation
+        self.networkMonitor = networkMonitor
+        self.networkService = networkService
+        self.errorHandler = errorHandler
+        self.messageManager = MessageManager(
+            modelContext: modelContext,
+            errorHandler: errorHandler
+        )
+    }
+    
+    // Convenience initializer for backward compatibility
+    convenience init(
+        conversation: Conversation,
+        modelContext: ModelContext,
+        networkMonitor: NetworkMonitor,
+        errorHandler: @escaping (AppError) -> Void
+    ) {
+        self.init(
+            conversation: conversation,
+            modelContext: modelContext,
+            networkMonitor: networkMonitor,
+            networkService: NetworkService(networkMonitor: networkMonitor),
+            errorHandler: errorHandler
+        )
+    }
+    
     @MainActor
     func sendMessage() async {
         guard !messageText.isEmpty else { return }
@@ -81,27 +103,14 @@ class ChatViewModel {
         let userMessageContent = messageText
         let userMessage = Message(content: userMessageContent, isUser: true)
         
-        // Configure relationship properly
-        userMessage.conversation = conversation
-        conversation.messages.append(userMessage)
+        // Add the message to the conversation through the manager
+        messageManager.addMessage(userMessage, to: conversation)
         
-        // Update conversation metadata
-        if conversation.messages.count == 1 {
-            conversation.title = String(userMessageContent.prefix(50))
-        }
-        conversation.lastUpdated = Date()
+        // Update conversation title if needed
+        messageManager.updateConversationTitle(conversation, with: userMessageContent)
         
         // Clear input immediately after creating the message
         messageText = ""
-        
-        // Save using the model context
-        do {
-            modelContext.insert(userMessage)
-            try modelContext.save()
-        } catch {
-            errorHandler(.saveFailed("Could not save your message"))
-            return
-        }
         
         // Show thinking state
         isThinking = true
@@ -110,11 +119,11 @@ class ChatViewModel {
         streamingMessage = nil
         streamingText = ""
         
-        // Simulate API call
-        await simulateAPIResponse()
+        // Get AI response
+        await fetchAIResponse(for: userMessageContent)
     }
     
-    private func simulateAPIResponse() async {
+    private func fetchAIResponse(for userInput: String) async {
         do {
             // Simulate network delay
             try await Task.sleep(nanoseconds: 2_000_000_000)
@@ -128,12 +137,17 @@ class ChatViewModel {
                 return
             }
             
+            // Fetch response from network service or fall back to mock
+            let responseText: String
+            
+            // For now, just use mock responses since we don't have a real API
+            // In the future, we would use: try await networkService.fetchAIResponse(prompt: userInput)
+            responseText = mockResponses.randomElement() ?? "I'm here to help!"
+            
             // Process response on main actor
             await MainActor.run {
                 isThinking = false
                 HapticService.tick()
-                
-                let responseText = mockResponses.randomElement() ?? "I'm here to help!"
                 createStreamingMessage(with: responseText)
             }
         } catch {
@@ -164,8 +178,6 @@ class ChatViewModel {
             await streamTokens(text)
         }
     }
-    
-    // Replace these methods in ChatViewModel.swift
     
     private func streamTokens(_ fullText: String) async {
         // Stream character by character to preserve Markdown
@@ -206,25 +218,11 @@ class ChatViewModel {
     private func completeStreaming() {
         guard let message = streamingMessage else { return }
         
-        // Add to conversation only if not already there
-        if !conversation.messages.contains(where: { $0.id == message.id }) {
-            conversation.messages.append(message)
-        }
+        messageManager.completeStreamingMessage(message, in: conversation)
         
-        conversation.lastUpdated = Date()
-        
-        // Clear streaming state first
-        let messageToSave = message  // Keep a reference for saving
+        // Clear streaming state
         streamingMessage = nil
         streamingText = ""
-        
-        do {
-            // Insert and save the completed message
-            modelContext.insert(messageToSave)
-            try modelContext.save()
-        } catch {
-            errorHandler(.saveFailed("Could not save AI response"))
-        }
     }
     
     @MainActor
@@ -236,18 +234,6 @@ class ChatViewModel {
     
     @MainActor
     func deleteMessage(_ message: Message) {
-        modelContext.delete(message)
-        conversation.lastUpdated = Date()
-        
-        do {
-            try modelContext.save()
-        } catch {
-            errorHandler(.saveFailed("Could not delete message"))
-        }
-    }
-    
-    deinit {
-        streamingMessage = nil
-        streamingText = ""
+        messageManager.deleteMessage(message, from: conversation)
     }
 }
