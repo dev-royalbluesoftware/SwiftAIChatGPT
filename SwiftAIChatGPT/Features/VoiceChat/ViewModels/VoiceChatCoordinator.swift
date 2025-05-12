@@ -4,8 +4,7 @@
 // VoiceChatCoordinator.swift
 //
 // Created by rbs-dev
-// Copyright © Royal Blue Software
-//
+// Copyright Royal Blue Software
 
 
 import SwiftUI
@@ -114,9 +113,14 @@ class VoiceChatCoordinator {
             showSettingsPrompt = true
             return false
         } else {
-            // Safe to dismiss
+            // Safe to dismiss - prepare for dismissal first
+            viewModel?.prepareForDismissal()
             viewModel?.stopVoiceChat()
             visualizationViewModel.reset()
+            
+            // Clear reference
+            viewModel = nil
+            
             return true
         }
     }
