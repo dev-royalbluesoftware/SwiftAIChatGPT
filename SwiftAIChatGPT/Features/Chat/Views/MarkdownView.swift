@@ -14,11 +14,16 @@ struct MarkdownView: View {
     let text: String
     
     var body: some View {
-        if let attributedString = try? AttributedString(markdown: text) {
+        if let attributedString = try? AttributedString(
+            markdown: self.text,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace
+            )
+        ) {
             Text(attributedString)
                 .textSelection(.enabled)
         } else {
-            Text(text)
+            Text(self.text)
                 .textSelection(.enabled)
         }
     }

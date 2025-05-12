@@ -36,15 +36,32 @@ class ChatViewModel {
         self.errorHandler = errorHandler
     }
     
+    // Replace only the mockResponses array in ChatViewModel.swift
     private let mockResponses = [
+        // Simple responses with proper spacing
         "I understand your question. Let me help you with that.",
+        
         "That's an interesting point! Here's what I think about it.",
-        "Based on what you're asking, I would suggest considering these options.",
-        "I see what you mean. Let me provide some insights on this topic.",
-        "**Great question!** Here's what I can tell you about that:\n\n *First*, let's consider the main aspects...",
-        "This is a **fascinating** topic. Let me break it down:\n\n 1. The primary consideration\n 2. Secondary factors\n 3. Additional insights",
-        "# Understanding Your Query\n\n Here's a detailed explanation:\n\n## Key Points\n- First important aspect\n- Second consideration\n- Third element\n\n> Remember: This is just a simulation!",
-        "Let me think about this...\n\n```swift\n// Example code snippet\nfunc demonstrateFeature() {\n    print(\"This is a code example\")\n}\n```\n\nThe above code shows a simple implementation."
+        
+        // Bold and italic with proper spacing
+        "This topic requires **careful consideration**. Let me explain why *emphasis* on proper implementation matters.",
+        
+        // Lists with proper spacing and formatting
+        "Here are some key points to consider:\n\n1. First, establish your requirements clearly\n2. Second, design your architecture thoughtfully\n3. Finally, implement with attention to detail",
+        
+        "The main benefits include:\n\n- Improved user experience\n- Better performance\n- Easier maintenance\n- Greater scalability",
+        
+        // Headings with proper spacing
+        "# Swift Programming Basics\n\nSwift is a powerful language for iOS development.\n\n## Key Features\n\n- Type safety\n- Optionals\n- Protocol-oriented design\n- Modern syntax",
+        
+        // Code blocks with better examples
+        "Here's how you would implement a custom view modifier in SwiftUI:\n\n```swift\nstruct RoundedButtonStyle: ViewModifier {\n    var backgroundColor: Color\n    var cornerRadius: CGFloat\n    \n    func body(content: Content) -> some View {\n        content\n            .padding(.horizontal, 20)\n            .padding(.vertical, 10)\n            .background(backgroundColor)\n            .cornerRadius(cornerRadius)\n            .foregroundColor(.white)\n            .shadow(radius: 3)\n    }\n}\n\n// Usage\nButton(\"Save\") {\n    saveData()\n}\n.modifier(RoundedButtonStyle(backgroundColor: .blue, cornerRadius: 10))\n```\n\nThis creates a reusable button style for your application.",
+        
+        // Blockquotes with proper spacing
+        "As noted in Apple's documentation:\n\n> SwiftUI provides views, controls, and layout structures for declaring your app's user interface. The framework provides event handlers for delivering taps, gestures, and other types of input, and tools to manage the flow of data from your app's models down to the views and controls that users see and interact with.\n\nThis approach simplifies UI development.",
+        
+        // Links with proper formatting
+        "For more information, check the [Swift documentation](https://swift.org/documentation/) or visit [Apple's SwiftUI tutorials](https://developer.apple.com/tutorials/swiftui/)."
     ]
     
     @MainActor
@@ -148,10 +165,11 @@ class ChatViewModel {
         }
     }
     
+    // Replace these methods in ChatViewModel.swift
+
     private func streamTokens(_ fullText: String) async {
-        let words = fullText.split(separator: " ")
-        
-        for (index, word) in words.enumerated() {
+        // Stream character by character to preserve Markdown
+        for (index, char) in fullText.enumerated() {
             // Check if streaming was cancelled
             guard streamingMessage != nil else { return }
             
@@ -163,10 +181,10 @@ class ChatViewModel {
                 return
             }
             
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(nanoseconds: 30_000_000) // Faster for smoother appearance
             
             await MainActor.run {
-                updateStreamingText(index: index, word: word)
+                updateStreamingText(String(char))
             }
         }
         
@@ -174,15 +192,13 @@ class ChatViewModel {
             completeStreaming()
         }
     }
-    
+
     @MainActor
-    private func updateStreamingText(index: Int, word: Substring) {
+    private func updateStreamingText(_ char: String) {
         guard let message = streamingMessage else { return }
         
-        if index > 0 {
-            streamingText += " "
-        }
-        streamingText += String(word)
+        // Simply append the character without adding spaces
+        streamingText += char
         message.content = streamingText
     }
     
