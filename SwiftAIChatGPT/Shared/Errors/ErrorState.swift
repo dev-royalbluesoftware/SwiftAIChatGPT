@@ -5,7 +5,7 @@
 //
 // Created by rbs-dev
 // Copyright © Royal Blue Software
-// 
+//
 
 import SwiftUI
 
@@ -44,7 +44,14 @@ struct ErrorHandlerModifier: ViewModifier {
             ) { error in
                 // Primary button
                 Button("OK") {
-                    errorState.clear()
+                    // For permission errors in VoiceChatView, we don't auto-dismiss
+                    // because we're showing custom UI
+                    if case .permissionDenied = error {
+                        // Don't clear if we're showing a dedicated UI that needs the error info
+                        // The dedicated UI will call errorState.clear() when appropriate
+                    } else {
+                        errorState.clear()
+                    }
                 }
                 
                 // Secondary button based on error type

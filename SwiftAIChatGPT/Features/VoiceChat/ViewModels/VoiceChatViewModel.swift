@@ -5,7 +5,7 @@
 //
 // Created by rbs-dev
 // Copyright © Royal Blue Software
-// 
+//
 
 
 import SwiftUI
@@ -19,6 +19,8 @@ class VoiceChatViewModel: NSObject {
     var transcribedText = ""
     var aiResponse = ""
     var isAISpeaking = false
+    var permissionDenied = false
+    var deniedPermissionType: AppError.PermissionType?
     
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -128,6 +130,8 @@ class VoiceChatViewModel: NSObject {
             retryCount = 0
             transcribedText = ""
             aiResponse = ""  // Clear AI response from previous session
+            permissionDenied = false
+            deniedPermissionType = nil
         }
         
         let micPermission = checkMicrophonePermission()
@@ -138,9 +142,17 @@ class VoiceChatViewModel: NSObject {
             if speechGranted {
                 await startRecordingWithRetry()
             } else {
+                await MainActor.run {
+                    permissionDenied = true
+                    deniedPermissionType = .speechRecognition
+                }
                 errorHandler(.permissionDenied(.speechRecognition))
             }
         case .denied:
+            await MainActor.run {
+                permissionDenied = true
+                deniedPermissionType = .microphone
+            }
             errorHandler(.permissionDenied(.microphone))
         case .undetermined:
             let granted = await requestMicrophonePermission()
@@ -149,9 +161,17 @@ class VoiceChatViewModel: NSObject {
                 if speechGranted {
                     await startRecordingWithRetry()
                 } else {
+                    await MainActor.run {
+                        permissionDenied = true
+                        deniedPermissionType = .speechRecognition
+                    }
                     errorHandler(.permissionDenied(.speechRecognition))
                 }
             } else {
+                await MainActor.run {
+                    permissionDenied = true
+                    deniedPermissionType = .microphone
+                }
                 errorHandler(.permissionDenied(.microphone))
             }
         }
@@ -493,6 +513,10 @@ class VoiceChatViewModel: NSObject {
         aiAudioLevel = 0
         userAudioLevel = 0
         
+        // Clear permission error state
+        permissionDenied = false
+        deniedPermissionType = nil
+        
         // Ensure all values are reset to prevent NaN issues
         isRecording = false
         isProcessing = false
@@ -541,6 +565,15 @@ class VoiceChatViewModel: NSObject {
     
     deinit {
         stopVoiceChat()
+    }
+    
+    func retryAfterPermissionError() {
+        permissionDenied = false
+        deniedPermissionType = nil
+        
+        // Reset these flags to allow a fresh start
+        isIntentionallyStopping = false
+        hasEncounteredError = false
     }
 }
 

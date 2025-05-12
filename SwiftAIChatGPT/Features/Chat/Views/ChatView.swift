@@ -185,8 +185,8 @@ struct ChatView: View {
                     await vm.sendMessage()
                 }
             }) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
+                Image(systemName: "paperplane.circle.fill")
+                    .font(.system(size: 36))
                     .foregroundColor(vm.messageText.isEmpty ? .gray : .blue)
             }
             .disabled(vm.messageText.isEmpty || vm.isThinking)

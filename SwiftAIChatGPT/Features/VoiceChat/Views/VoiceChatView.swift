@@ -10,6 +10,18 @@
 
 import SwiftUI
 import AVFoundation
+//
+//
+// SwiftAIChatGPT
+// VoiceChatView.swift
+//
+// Created by rbs-dev
+// Copyright © Royal Blue Software
+//
+
+
+import SwiftUI
+import AVFoundation
 
 struct VoiceChatView: View {
     @Environment(\.dismiss) private var dismiss
@@ -17,40 +29,136 @@ struct VoiceChatView: View {
     @State private var voiceViewModel: VoiceChatViewModel?
     @State private var visualizationViewModel = AudioVisualizationViewModel()
     @State private var showRetryButton = false
+    @State private var allowDismissal = true
+    @State private var showSettingsPrompt = false
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                // Gradient background
-                LinearGradient(
-                    colors: [.black, Color(white: 0.1)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                if let voiceViewModel = voiceViewModel {
-                    voiceChatContent(voiceViewModel: voiceViewModel)
-                } else {
-                    ProgressView()
-                        .onAppear {
-                            initializeViewModel()
+        ZStack {
+            // Main content wrapped in a NavigationStack
+            NavigationStack {
+                ZStack {
+                    // Gradient background
+                    LinearGradient(
+                        colors: [.black, Color(white: 0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
+                    
+                    if let voiceViewModel = voiceViewModel {
+                        voiceChatContent(voiceViewModel: voiceViewModel)
+                    } else {
+                        ProgressView()
+                            .onAppear {
+                                initializeViewModel()
+                            }
+                    }
+                }
+                .preferredColorScheme(.dark)
+                .navigationBarBackButtonHidden(true)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            attemptToDismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.title2)
+                                .foregroundColor(.white)
                         }
+                    }
+                    
+                    if !allowDismissal {
+                        ToolbarItem(placement: .principal) {
+                            Text("Permission required")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
                 }
             }
-            .preferredColorScheme(.dark)
         }
-        .errorHandler(coordinator.errorState) {
-            // Show retry button when error occurs
+        .interactiveDismissDisabled(!allowDismissal)
+        // Use custom error handling to avoid alert conflicts
+        .onChange(of: coordinator.errorState.isShowing) { _, newValue in
+            if newValue, let error = coordinator.errorState.currentError {
+                handleError(error)
+            }
+        }
+        // Listen for permission changes
+        .onChange(of: voiceViewModel?.permissionDenied) { _, newValue in
+            // Schedule this work to happen after any current presentation
+            DispatchQueue.main.async {
+                // Block dismissal when permissions are denied
+                allowDismissal = !(newValue == true)
+                
+                // Debug
+                print("Permission denied changed: \(String(describing: newValue)), allowDismissal: \(allowDismissal)")
+                
+                // If permission was denied, make sure we show the custom UI instead of an alert
+                if newValue == true {
+                    coordinator.errorState.clear() // Clear any alerts to avoid conflicts
+                    showSettingsPrompt = true
+                }
+            }
+        }
+    }
+    
+    private func handleError(_ error: AppError) {
+        // For permission errors, we'll handle them with our custom UI
+        if case .permissionDenied = error {
+            DispatchQueue.main.async {
+                allowDismissal = false
+                showSettingsPrompt = true
+                coordinator.errorState.clear() // Clear the error to avoid showing standard alert
+            }
+        } else {
+            // For other errors, show retry button
             showRetryButton = true
         }
     }
     
     private func initializeViewModel() {
+        // Create view model with custom error handler
         let vm = VoiceChatViewModel(errorHandler: { error in
-            coordinator.handleError(error)
+            // Handle on main thread to avoid timing issues
+            DispatchQueue.main.async {
+                // For permission errors, update our local state directly
+                if case .permissionDenied = error {
+                    allowDismissal = false
+                    showSettingsPrompt = true
+                    
+                    // We'll still pass the error to the coordinator but clear it immediately
+                    // to avoid showing the standard alert
+                    self.coordinator.handleError(error)
+                    self.coordinator.errorState.clear()
+                } else {
+                    // For other errors, use normal error handling
+                    self.coordinator.handleError(error)
+                }
+            }
         })
         voiceViewModel = vm
+    }
+    
+    private func attemptToDismiss() {
+        if !allowDismissal {
+            // Can't dismiss while permissions are denied - provide feedback
+            HapticService.error()
+            
+            // Highlight the issue
+            showSettingsPrompt = true
+        } else {
+            // Safe to dismiss
+            voiceViewModel?.stopVoiceChat()
+            visualizationViewModel.reset()
+            dismiss()
+        }
+    }
+    
+    private func openSettings() {
+        if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsUrl)
+        }
     }
     
     @ViewBuilder
@@ -58,109 +166,99 @@ struct VoiceChatView: View {
         @Bindable var voiceVM = voiceViewModel
         
         VStack {
-            // Header
-            HStack {
-                Button(action: {
-                    voiceViewModel.stopVoiceChat()
-                    visualizationViewModel.reset()
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
+            if voiceViewModel.permissionDenied || showSettingsPrompt {
+                // Show permission denied view
+                permissionDeniedView(for: voiceViewModel)
+            } else {
+                // Regular voice chat content
+                Spacer()
+                
+                // Audio visualization
+                AudioVisualizationContainer(
+                    state: $visualizationViewModel.state,
+                    audioLevel: $visualizationViewModel.audioLevel,
+                    isRecording: $voiceVM.isRecording
+                )
+                .frame(height: 200)
                 .padding()
                 
                 Spacer()
-            }
-            
-            Spacer()
-            
-            // Audio visualization
-            AudioVisualizationContainer(
-                state: $visualizationViewModel.state,
-                audioLevel: $visualizationViewModel.audioLevel,
-                isRecording: $voiceVM.isRecording
-            )
-            .frame(height: 200)
-            .padding()
-            
-            Spacer()
-            
-            // Status text
-            Text(statusText(for: voiceViewModel))
-                .foregroundColor(.white.opacity(0.7))
-                .font(.subheadline)
-                .padding(.bottom, 20)
-            
-            // Transcribed text display
-            if !voiceViewModel.transcribedText.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("You:")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                    Text(voiceViewModel.transcribedText)
-                        .foregroundColor(.white)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 15)
-                        .fill(Color.white.opacity(0.1))
-                )
-                .padding(.horizontal)
-            }
-            
-            // AI Response display
-            if !voiceViewModel.aiResponse.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("AI:")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                    Text(voiceViewModel.aiResponse)
-                        .foregroundColor(.white)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 15)
-                        .fill(Color.blue.opacity(0.2))
-                )
-                .padding(.horizontal)
-            }
-            
-            // Main action button
-            Button(action: {
-                toggleRecording(voiceViewModel: voiceViewModel)
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(voiceViewModel.isRecording ? Color.red : Color.white)
-                        .frame(width: 80, height: 80)
-                    
-                    Image(systemName: voiceViewModel.isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 35))
-                        .foregroundColor(voiceViewModel.isRecording ? .white : .black)
-                }
-            }
-            .disabled(voiceViewModel.isProcessing || voiceViewModel.isAISpeaking)
-            .padding(.bottom, 50)
-            
-            // Add a manual retry button if errors occur
-            if showRetryButton {
-                Button(action: {
-                    showRetryButton = false
-                    Task {
-                        await voiceViewModel.startVoiceChat()
+                
+                // Status text
+                Text(statusText(for: voiceViewModel))
+                    .foregroundColor(.white.opacity(0.7))
+                    .font(.subheadline)
+                    .padding(.bottom, 20)
+                
+                // Transcribed text display
+                if !voiceViewModel.transcribedText.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("You:")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        Text(voiceViewModel.transcribedText)
+                            .foregroundColor(.white)
                     }
-                }) {
-                    Label("Retry Voice Chat", systemImage: "arrow.clockwise")
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color.white.opacity(0.1))
+                    )
+                    .padding(.horizontal)
                 }
-                .padding(.bottom, 20)
+                
+                // AI Response display
+                if !voiceViewModel.aiResponse.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AI:")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        Text(voiceViewModel.aiResponse)
+                            .foregroundColor(.white)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color.blue.opacity(0.2))
+                    )
+                    .padding(.horizontal)
+                }
+                
+                // Main action button
+                Button(action: {
+                    toggleRecording(voiceViewModel: voiceViewModel)
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(voiceViewModel.isRecording ? Color.red : Color.white)
+                            .frame(width: 80, height: 80)
+                        
+                        Image(systemName: voiceViewModel.isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 35))
+                            .foregroundColor(voiceViewModel.isRecording ? .white : .black)
+                    }
+                }
+                .disabled(voiceViewModel.isProcessing || voiceViewModel.isAISpeaking)
+                .padding(.bottom, 50)
+                
+                // Add a manual retry button if errors occur
+                if showRetryButton {
+                    Button(action: {
+                        showRetryButton = false
+                        Task {
+                            await voiceViewModel.startVoiceChat()
+                        }
+                    }) {
+                        Label("Retry Voice Chat", systemImage: "arrow.clockwise")
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.bottom, 20)
+                }
             }
         }
         .onChange(of: voiceViewModel.isRecording) { _, newValue in
@@ -180,6 +278,64 @@ struct VoiceChatView: View {
             if voiceViewModel.isAISpeaking {
                 visualizationViewModel.updateAudioLevel(newValue)
             }
+        }
+        .animation(.easeInOut(duration: 0.3), value: voiceViewModel.permissionDenied)
+        .animation(.easeInOut(duration: 0.3), value: showSettingsPrompt)
+    }
+    
+    // New View for Permission Denied UI
+    private func permissionDeniedView(for viewModel: VoiceChatViewModel) -> some View {
+        VStack(spacing: 30) {
+            Spacer()
+            
+            Image(systemName: viewModel.deniedPermissionType == .microphone ? "mic.slash" : "waveform.slash")
+                .font(.system(size: 70))
+                .foregroundColor(.white.opacity(0.9))
+            
+            Text("\(viewModel.deniedPermissionType?.rawValue ?? "Permission") Required")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+            
+            Text("This feature requires \(viewModel.deniedPermissionType?.rawValue.lowercased() ?? "microphone") access to work properly. Please enable it in Settings to continue.")
+                .multilineTextAlignment(.center)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 30)
+            
+            Spacer()
+            
+            HStack(spacing: 20) {
+                Button {
+                    // Try again - this will re-request permission if it was previously "undetermined"
+                    viewModel.retryAfterPermissionError()
+                    coordinator.clearError() // Clear any displayed error
+                    showSettingsPrompt = false
+                    allowDismissal = true // Allow dismissal again
+                    
+                    Task {
+                        await viewModel.startVoiceChat()
+                    }
+                } label: {
+                    Text("Try Again")
+                        .frame(minWidth: 130)
+                        .padding()
+                        .background(Color.blue.opacity(0.6))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                
+                Button {
+                    openSettings()
+                } label: {
+                    Text("Open Settings")
+                        .frame(minWidth: 130)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+            }
+            .padding(.bottom, 50)
         }
     }
     
@@ -211,6 +367,21 @@ struct VoiceChatView: View {
         } else {
             // Clear any previous errors when manually starting
             showRetryButton = false
+            
+            // We'll check microphone permissions first synchronously
+            // to immediately show our custom UI rather than waiting for the alert
+            let micStatus = voiceViewModel.checkMicrophonePermission()
+            if micStatus == .denied {
+                voiceViewModel.permissionDenied = true
+                voiceViewModel.deniedPermissionType = .microphone
+                showSettingsPrompt = true
+                allowDismissal = false
+                
+                // Don't call startVoiceChat in this case
+                return
+            }
+            
+            // For undetermined or granted, proceed normally
             Task {
                 await voiceViewModel.startVoiceChat()
             }
