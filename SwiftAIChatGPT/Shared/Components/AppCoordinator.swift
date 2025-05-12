@@ -23,6 +23,13 @@ final class AppCoordinator {
     
     // MARK: - Shared Services
     let networkMonitor = NetworkMonitor()
+    let networkService: NetworkService
+    
+    // MARK: - Initialization
+    
+    init() {
+        self.networkService = NetworkService(networkMonitor: networkMonitor)
+    }
     
     // MARK: - Navigation Methods
     
@@ -120,6 +127,19 @@ final class AppCoordinator {
     
     func resetForNewConversation() {
         errorState.clear()
+    }
+    
+    // MARK: - Network and API Handling
+    
+    func fetchAIResponse(for prompt: String) async -> Result<String, AppError> {
+        do {
+            let response = try await networkService.fetchAIResponse(prompt: prompt)
+            return .success(response)
+        } catch let error as AppError {
+            return .failure(error)
+        } catch {
+            return .failure(.unknown(error.localizedDescription))
+        }
     }
     
     // MARK: - Additional Methods for Refactoring
